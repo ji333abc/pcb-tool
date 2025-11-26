@@ -3,513 +3,384 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>PCB 焊接助手 (Excel/CSV 全能版)</title>
-<!-- 引入 SheetJS 用于解析 Excel -->
+<title>PCB 焊接助手 (适配 Name 列)</title>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
-
 <style>
-  :root {
-    --sidebar-bg: #2b2d30;
-    --sidebar-text: #adb0b8;
-    --accent-color: #4a88c7;
-    --selected-bg: #2675bf;
-    --canvas-bg: #f0f2f5;
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0; padding: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    height: 100vh; display: flex; overflow: hidden; background-color: var(--canvas-bg);
-  }
+  :root { --sidebar-bg:#2b2d30; --sidebar-text:#adb0b8; --accent:#4a88c7; --sel:#2675bf; --bg:#f0f2f5; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,sans-serif; height:100vh; display:flex; overflow:hidden; background:var(--bg); }
+  
+  aside { width:320px; background:var(--sidebar-bg); color:var(--sidebar-text); display:flex; flex-direction:column; border-right:1px solid #1e1e1e; z-index:20; flex-shrink:0; }
+  
+  .header { padding:10px; background:#1e1f22; border-bottom:1px solid #3e4145; }
+  .btn { display:block; background:var(--accent); color:#fff; text-align:center; padding:8px; border-radius:4px; font-size:14px; margin-bottom:8px; cursor:pointer; }
+  .file-box { position:relative; overflow:hidden; }
+  .file-box input { position:absolute; left:0; top:0; opacity:0; width:100%; height:100%; cursor:pointer; }
+  input[type=text] { width:100%; padding:8px; background:#1e1f22; border:1px solid #555; color:#fff; border-radius:4px; margin-top:5px;}
+  
+  .opt-group { display:flex; gap:15px; font-size:13px; color:#ddd; margin-bottom:6px; align-items:center; }
+  .opt-group label { display:flex; align-items:center; cursor:pointer; }
+  .opt-group input { margin-right:4px; }
+  .divider { height:1px; background:#444; margin:8px 0; }
 
-  /* 侧边栏 */
-  aside {
-    width: 320px; background-color: var(--sidebar-bg); color: var(--sidebar-text);
-    display: flex; flex-direction: column; border-right: 1px solid #1e1e1e; z-index: 20;
-  }
-  .header { padding: 10px; background-color: #1e1f22; border-bottom: 1px solid #3e4145; }
-  h2 { margin: 0 0 8px 0; font-size: 16px; color: #fff; }
-  .view-mode { display: flex; gap: 10px; margin-bottom: 8px; font-size: 12px; color: #fff; }
-  .view-mode label { display: flex; align-items: center; cursor: pointer; }
-  .view-mode input { margin-right: 4px; }
-  .file-upload { position: relative; overflow: hidden; margin-bottom: 8px; }
-  .file-upload input { position: absolute; left: 0; top: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
-  .btn { display: block; background-color: var(--accent-color); color: white; text-align: center; padding: 8px; border-radius: 4px; font-size: 14px; transition: 0.2s; }
-  .btn:hover { opacity: 0.9; }
-  #search { width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #555; background: #1e1f22; color: #fff; }
-  #list-container { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
-  .comp-item { padding: 10px; border-bottom: 1px solid #3e4145; display: flex; flex-direction: column; cursor: pointer; }
-  .comp-item.active { background-color: var(--selected-bg); color: #fff; }
-  .comp-ref { font-weight: bold; font-size: 15px; }
-  .comp-desc { font-size: 12px; opacity: 0.8; margin-top: 2px; }
-  #info-panel { padding: 10px; background: #1e1f22; border-top: 1px solid #3e4145; font-size: 12px; height: 140px; overflow-y: auto; }
-  .info-row { display: flex; margin-bottom: 4px; border-bottom: 1px dashed #444; }
-  .info-label { width: 60px; color: #888; }
-  .info-val { flex: 1; color: #ddd; word-break: break-all; }
+  #list { flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; border-bottom: 1px solid #3e4145; }
+  .item { padding:10px; border-bottom:1px solid #3e4145; cursor:pointer; }
+  .item.active { background:var(--sel); color:#fff; }
+  .item b { display:block; font-size:15px; }
+  .item span { font-size:12px; opacity:0.8; }
 
-  /* 画布 */
-  main {
-    flex: 1; position: relative; overflow: hidden;
-    background-image: radial-gradient(#ccc 1px, transparent 1px);
-    background-size: 20px 20px; touch-action: none;
-  }
-  canvas { display: block; width: 100%; height: 100%; }
-  #reset-btn {
-    position: absolute; top: 10px; right: 10px;
-    background: white; border: 1px solid #999; padding: 5px 10px;
-    border-radius: 4px; font-size: 12px; cursor: pointer;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.2); z-index: 5;
-  }
+  #info-panel { height: 160px; background: #232528; padding: 10px; overflow-y: auto; font-size: 13px; color: #ddd; flex-shrink: 0; }
+  .info-row { display: flex; margin-bottom: 5px; border-bottom: 1px dashed #444; padding-bottom: 2px; }
+  .info-label { width: 70px; color: #888; font-weight: bold; }
+  .info-val { flex: 1; word-break: break-all; color: #fff; }
 
-  /* 响应式 */
-  @media (max-width: 768px) {
-    body { flex-direction: column-reverse; }
-    aside { width: 100%; height: 45%; border-right: none; border-top: 1px solid #3e4145; }
-    main { height: 55%; }
-    #info-panel { display: none; }
-  }
+  main { flex:1; position:relative; background:radial-gradient(#ccc 1px, transparent 1px); background-size:20px 20px; overflow:hidden; touch-action:none; width: 100%; height: 100%; }
+  canvas { display: block; width: 100%; height: 100%; position: absolute; top: 0; left: 0; }
+  #reset { position:absolute; top:10px; right:10px; background:#fff; border:1px solid #999; padding:5px 10px; border-radius:4px; cursor:pointer; z-index:5; }
+  
+  @media(max-width:768px){ body{flex-direction:column-reverse;} aside{width:100%;height:45%;} main{height:55%;} #info-panel { height: 120px; } }
 </style>
 </head>
 <body>
 
 <aside>
   <div class="header">
-    <h2>PCB 焊接助手</h2>
-    <div class="file-upload">
-      <!-- 接受 xlsx, xls, csv, txt -->
-      <div class="btn">📂 导入文件 (Excel / CSV)</div>
-      <input type="file" id="file" accept=".csv,.tsv,.txt,.xlsx,.xls">
+    <div class="file-box">
+      <div class="btn">📂 导入 Excel / CSV</div>
+      <input type="file" id="file" accept=".csv,.txt,.xlsx,.xls">
     </div>
-    
-    <div class="view-mode">
-      <label><input type="radio" name="mode" value="value" checked> 显示参数</label>
-      <label><input type="radio" name="mode" value="ref"> 显示位号</label>
+    <div class="opt-group" style="font-weight:bold; color:#fff;">
+      <span>层级:</span>
+      <label><input type="radio" name="layer" value="T" checked> 顶层 (Top)</label>
+      <label><input type="radio" name="layer" value="B"> 底层 (Bot)</label>
     </div>
-
-    <input type="text" id="search" placeholder="🔍 搜位号 (例如 R1)...">
-  </div>
-
-  <div id="list-container">
-    <div style="padding:20px; text-align:center; opacity:0.5;">支持 Excel (.xlsx/.xls) 和 CSV</div>
-  </div>
-
-  <div id="info-panel">
-    <div style="color:#aaa; padding-top:10px">
-      支持 Excel 直接导入<br>
-      滚轮/双指缩放，拖拽平移
+    <div class="divider"></div>
+    <div class="opt-group">
+      <span>显示:</span>
+      <label><input type="radio" name="mode" value="value" checked> 参数</label>
+      <label><input type="radio" name="mode" value="ref"> 位号</label>
     </div>
+    <input type="text" id="search" placeholder="🔍 搜位号/Name...">
   </div>
+  <div id="list"><div style="padding:20px;text-align:center;opacity:0.5">请先导入文件</div></div>
+  <div id="info-panel"><div style="color:#666; text-align:center; margin-top:40px;">选中元件查看详情</div></div>
 </aside>
 
 <main>
-  <button id="reset-btn">🔄 复位视图</button>
+  <button id="reset">全屏适应</button>
   <canvas id="pcb"></canvas>
 </main>
 
 <script>
-// ========== 1. 数据解析 (统一处理 CSV 和 Excel) ==========
+// ========== 1. 参数提取 ==========
+const SHAPES = { CHIP:1, SOT:2, SOP:3, QFP:4, CIRCLE:6, DEFAULT:0 };
 
-// 封装估算尺寸
-function estimateSize(footprint){
-  const fp = (footprint || "").toUpperCase();
-  let mL = fp.match(/L([\d.]+)/), mW = fp.match(/W([\d.]+)/);
-  if (mL && mW) return { w: parseFloat(mL[1]) || 2, h: parseFloat(mW[1]) || 1 };
-  if (fp.includes("0402")) return { w:1.0, h:0.5 };
-  if (fp.includes("0603")) return { w:1.6, h:0.8 };
-  if (fp.includes("0805")) return { w:2.0, h:1.25 };
-  if (fp.includes("1206")) return { w:3.2, h:1.6 };
-  if (fp.includes("SOT-23")) return { w:2.9, h:1.6 };
-  if (fp.includes("SOP-8")) return { w:5.0, h:4.0 };
-  if (fp.includes("QFN")) return { w:4.0, h:4.0 };
-  return { w:2.0, h:1.0 };
+function extractParams(fp) {
+  const s = (fp || "").toUpperCase();
+  const p = { L:null, W:null, P:null, LS:null, pins:null };
+  const matchVal = key => { const m = s.match(new RegExp(`[-_\\s]${key}([\\d.]+)`)); return m ? parseFloat(m[1]) : null; };
+  p.L = matchVal("L"); p.W = matchVal("W"); p.P = matchVal("P"); p.LS = matchVal("LS");
+  const sotMatch = s.match(/SOT[-_]?23[-_](\d+)/); 
+  if (sotMatch) p.pins = parseInt(sotMatch[1]);
+  else if (s.match(/(\d+)(?:-|_)?(?:PIN|P)(?=[-_]|$)/)) p.pins = parseInt(s.match(/(\d+)(?:-|_)?(?:PIN|P)(?=[-_]|$)/)[1]);
+  else if (s.includes("SOT-23") || s.includes("SOT23")) p.pins = 3;
+  else { const suffix = s.match(/(?:SOP|SOIC|TSSOP|QFN|QFP|DIP)[-_]?(\d+)/); if (suffix) p.pins = parseInt(suffix[1]); }
+  return p;
 }
 
-// 核心逻辑：无论是 CSV 还是 Excel，最终都转成“行数组”来处理
-function processRows(rows) {
+function analyzeFootprint(fp) {
+  const s = (fp||"").toUpperCase();
+  const p = extractParams(fp);
+  let type = SHAPES.DEFAULT;
+  if(s.includes("0402")||s.includes("0603")||s.includes("0805")||s.includes("1206")||s.match(/^R\d+/)||s.match(/^C\d+/)) type = SHAPES.CHIP;
+  else if(s.includes("SOT")) type = SHAPES.SOT;
+  else if(s.includes("SOP")||s.includes("SOIC")) type = SHAPES.SOP;
+  else if(s.includes("QFP")||s.includes("QFN")) type = SHAPES.QFP;
+  else if(s.includes("RADIAL")||s.includes("CAN")) type = SHAPES.CIRCLE;
+  return { type, ...p };
+}
+
+function calculateBounds(fp, info) {
+  let w=2.0, h=1.0;
+  const { L, W, LS, type } = info;
+  if(type===SHAPES.SOT) { w = L || 2.9; h = LS || ((W||1.3)+1.1); } 
+  else if(type===SHAPES.SOP) { w = L || ((info.pins||8)/2 * 1.27 + 1.0); h = LS || ((W||3.9)+2.0); } 
+  else if(type===SHAPES.CHIP) { if(L) w=L; if(W) h=W; else if(fp.toUpperCase().includes("0603")){w=1.6;h=0.8;} else if(fp.toUpperCase().includes("0805")){w=2.0;h=1.25;} } 
+  else { if(L) w=L; if(W) h=W; }
+  return { w, h };
+}
+
+// ========== 2. 绘图引擎 ==========
+function drawComponent(ctx, c, isSel) {
+  const info = c.shapeInfo;
+  const w = c.w, h = c.h;
+  const color = isSel ? "#d00" : "#666";
+  const fill = isSel ? "rgba(255,0,0,0.2)" : "#fff";
+  const padFill = isSel ? "rgba(255,0,0,0.6)" : "#ccc";
+  
+  ctx.lineWidth = isSel ? 0.2 : 0.1;
+  ctx.strokeStyle = color; ctx.fillStyle = fill;
+
+  if(info.type === SHAPES.SOT) {
+    ctx.rotate(270 * Math.PI / 180); 
+    const bodyH = info.W || (h * 0.55);
+    const pins = info.pins || 3;
+    const P = info.P || 0.95;
+    const padW = 0.5, padLen = (h - bodyH)/2;
+    ctx.fillRect(-w/2, -bodyH/2, w, bodyH); ctx.strokeRect(-w/2, -bodyH/2, w, bodyH);
+    ctx.beginPath(); ctx.arc(-w/2+0.4, -bodyH/2+0.4, 0.15, 0, 2*Math.PI); ctx.fillStyle = isSel?"red":"#999"; ctx.fill();
+    ctx.fillStyle = padFill;
+    if(pins === 3) {
+      ctx.fillRect(-P/2-padW/2, -bodyH/2, padW, -padLen); 
+      ctx.fillRect(P/2-padW/2, -bodyH/2, padW, -padLen); 
+      ctx.fillRect(-padW/2, bodyH/2, padW, padLen); 
+    } else if(pins === 5) {
+      ctx.fillRect(-P-padW/2, -bodyH/2, padW, -padLen); ctx.fillRect(-padW/2, -bodyH/2, padW, -padLen); ctx.fillRect(P-padW/2, -bodyH/2, padW, -padLen);
+      ctx.fillRect(P-padW/2, bodyH/2, padW, padLen); ctx.fillRect(-P-padW/2, bodyH/2, padW, padLen);
+    } else if(pins === 6) {
+       for(let i of [-1, 0, 1]) { ctx.fillRect(i*P-padW/2, -bodyH/2, padW, -padLen); ctx.fillRect(i*P-padW/2, bodyH/2, padW, padLen); }
+    } else {
+      const side = Math.ceil(pins/2), startX = -((side-1)*P)/2;
+      for(let i=0; i<side; i++) { 
+        ctx.fillRect(startX+i*P-padW/2, -bodyH/2, padW, -padLen); 
+        if (i+side<pins) ctx.fillRect(startX+i*P-padW/2, bodyH/2, padW, padLen); 
+      }
+    }
+    ctx.rotate(-270 * Math.PI / 180);
+  }
+  else if(info.type === SHAPES.SOP) {
+    const bodyH = info.W || (h * 0.6);
+    ctx.fillRect(-w/2, -bodyH/2, w, bodyH); ctx.strokeRect(-w/2, -bodyH/2, w, bodyH);
+    ctx.beginPath(); ctx.arc(-w/2+w*0.1, -bodyH/2+bodyH*0.2, 0.2, 0, 2*Math.PI); ctx.fillStyle = isSel?"red":"#999"; ctx.fill();
+    ctx.fillStyle = padFill;
+    const sidePins = Math.floor((info.pins||8)/2), P = info.P || 1.27, startX = -((sidePins - 1) * P) / 2, padW = P*0.5, padLen = (h-bodyH)/2;
+    for(let i=0; i<sidePins; i++) { const px = startX + i*P; ctx.fillRect(px-padW/2, -h/2, padW, padLen); ctx.fillRect(px-padW/2, bodyH/2, padW, padLen); }
+  }
+  else if(info.type === SHAPES.CHIP) {
+    const padW = w*0.25;
+    ctx.fillStyle = padFill; ctx.fillRect(-w/2, -h/2, padW, h); ctx.fillRect(w/2-padW, -h/2, padW, h);
+    ctx.fillStyle = fill; ctx.fillRect(-w/2+padW, -h/2, w-2*padW, h); ctx.strokeRect(-w/2, -h/2, w, h);
+  }
+  else if(info.type === SHAPES.CIRCLE) {
+    const r=Math.min(w,h)/2; ctx.beginPath(); ctx.arc(0,0,r,0,2*Math.PI); ctx.fill(); ctx.stroke(); ctx.fillStyle="#333"; ctx.fillRect(-r/2,-r,r,r/2);
+  }
+  else {
+    ctx.fillRect(-w/2, -h/2, w, h); ctx.strokeRect(-w/2, -h/2, w, h);
+    ctx.beginPath(); ctx.arc(-w/2+w*0.15, -h/2+h*0.15, Math.min(w,h)*0.1, 0, 2*Math.PI); ctx.fillStyle = isSel?"red":"#ccc"; ctx.fill();
+  }
+}
+
+// ========== 3. 解析 ==========
+function parseRows(rows) {
   if (!rows || rows.length < 2) return [];
-
-  // 1. 寻找表头行 (有时 Excel 第一行是标题，第二行才是表头)
-  // 我们找包含 "Designator" 或 "Ref" 或 "Mid X" 的那一行
-  let headerIndex = 0;
-  let headerNorm = [];
+  let hIdx = 0;
+  // 智能寻找表头 (包含 Designator 或 Ref)
+  for(let i=0;i<Math.min(rows.length,5);i++){ const s=rows[i].join(" ").toLowerCase(); if(s.includes("designator")||s.includes("mid x")) { hIdx=i; break; } }
   
-  for(let i=0; i<Math.min(rows.length, 5); i++) {
-    const rowStr = rows[i].join(" ").toLowerCase();
-    if(rowStr.includes("designator") || rowStr.includes("mid x") || rowStr.includes("mid_x")) {
-      headerIndex = i;
-      headerNorm = rows[i].map(x => String(x).trim().toLowerCase());
-      break;
-    }
-  }
-
-  // 如果没找到明显的表头，默认用第0行
-  if(headerNorm.length === 0) headerNorm = rows[0].map(x => String(x).trim().toLowerCase());
-
-  const findCol = keys => headerNorm.findIndex(h => keys.some(k => h.includes(k)));
+  const h = rows[hIdx].map(x=>String(x).trim().toLowerCase());
+  const find = ks => h.findIndex(c => ks.some(k => c.includes(k)));
   
-  const iRef = findCol(["designator","ref"]);
-  const iMidX = findCol(["mid x","x(mm)","mid_x"]);
-  const iMidY = findCol(["mid y","y(mm)","mid_y"]);
-  const iRot = findCol(["rotation","rot","角度"]);
-  const iCom = findCol(["comment","备注"]);
-  const iVal = findCol(["value","值"]);
-  const iFp = findCol(["footprint","封装"]);
-  const iLayer = findCol(["layer","层"]);
-
-  if (iRef < 0 || iMidX < 0 || iMidY < 0) return [];
-
-  const num = str => (!str) ? NaN : parseFloat(String(str).replace(/mm/gi,"").replace(/[^\d.+\-eE]/g,""));
-
-  const comps = [];
-  // 从表头下一行开始遍历
-  for (let li = headerIndex + 1; li < rows.length; li++) {
-    const row = rows[li];
-    if (!row || row.length === 0) continue;
-
-    const ref = row[iRef]; 
-    if(!ref) continue;
-
-    // 只要顶层
-    if(iLayer >= 0) {
-        const l = String(row[iLayer] || "").toUpperCase();
-        if(l.startsWith("B")) continue;
-    }
-
-    const x = num(row[iMidX]), y = num(row[iMidY]);
-    if (isNaN(x) || isNaN(y)) continue;
+  const iRef=find(["designator","ref"]);
+  const iX=find(["mid x","x(mm)"]);
+  const iY=find(["mid y","y(mm)"]);
+  const iRot=find(["rotation","angle"]);
+  const iLayer=find(["layer","层"]);
+  const iVal=find(["value","值"]);
+  const iFp=find(["footprint","封装"]);
+  // 【关键修改】不再找 comment/备注，而是找 name
+  const iName=find(["name", "comment", "备注", "device"]); 
+  
+  if(iRef<0 || iX<0 || iY<0) return [];
+  
+  const num = v => parseFloat(String(v).replace(/mm/g,"")) || 0;
+  const arr = [];
+  
+  for(let i=hIdx+1; i<rows.length; i++){
+    const r=rows[i]; if(!r || !r[iRef]) continue;
+    const fp = iFp>=0 ? String(r[iFp]||"") : "";
+    const layerRaw = iLayer>=0 ? String(r[iLayer]||"").toUpperCase() : "T";
+    const isBot = layerRaw.includes("B") || layerRaw.includes("BOTTOM");
+    const info = analyzeFootprint(fp);
+    const bounds = calculateBounds(fp, info);
     
-    let angle = iRot >= 0 ? num(row[iRot]) : 0;
+    // 【关键修改】保存为 name 字段
+    const nameStr = iName>=0 ? String(r[iName]||"") : "";
     
-    const fpStr = iFp >= 0 ? String(row[iFp] || "") : "";
-    const sz = estimateSize(fpStr);
-    
-    comps.push({
-      ref: String(ref), 
-      x, y, 
-      angle: isNaN(angle)?0:angle,
-      w: sz.w, h: sz.h,
-      comment: iCom>=0 ? String(row[iCom] || "") : "",
-      value: iVal>=0 ? String(row[iVal] || "") : "",
-      footprint: fpStr
-    });
+    arr.push({ ref: r[iRef], x: num(r[iX]), y: num(r[iY]), angle: iRot>=0?num(r[iRot]):0, layer: isBot ? "B" : "T", w: bounds.w, h: bounds.h, val: iVal>=0?String(r[iVal]||""):"", name: nameStr, fp: fp, shapeInfo: info });
   }
-  return comps;
+  return arr;
 }
 
-// ========== 2. 交互式 Viewer (保持之前的完美逻辑) ==========
-function makeViewer(comps){
-  const canvas = document.getElementById("pcb");
-  const ctx = canvas.getContext("2d");
+// ========== 4. Viewer ==========
+function makeViewer(allComps){
+  const cvs = document.getElementById("pcb");
+  const ctx = cvs.getContext("2d");
   const dpr = window.devicePixelRatio || 1;
-  let transform = { k: 15, x: 0, y: 0 };
-  let selectedRef = null;
-  let isDragging = false;
-  let lastPos = { x: 0, y: 0 };
-  let lastDist = 0; 
+  let t = { k:15, x:0, y:0 }, sel = null, drag = false, last = {x:0,y:0}, lDist = 0;
+  let filteredComps = [];
 
-  function resize() {
-    const rect = canvas.parentElement.getBoundingClientRect();
-    canvas.width = rect.width * dpr;
-    canvas.height = rect.height * dpr;
-    ctx.scale(dpr, dpr);
-    canvas.style.width = rect.width + "px";
-    canvas.style.height = rect.height + "px";
-    requestAnimationFrame(draw);
+  function updateFilter() {
+    const curLayer = document.querySelector('input[name="layer"]:checked').value;
+    filteredComps = allComps.filter(c => c.layer === curLayer);
+    renderList(); draw(); 
   }
-  window.addEventListener('resize', resize);
-  resize();
 
-  function fitView(){
-    if(!comps.length) return;
-    let minX=1e9, maxX=-1e9, minY=1e9, maxY=-1e9;
-    comps.forEach(c => {
-      minX = Math.min(minX, c.x - c.w/2); maxX = Math.max(maxX, c.x + c.w/2);
-      minY = Math.min(minY, c.y - c.h/2); maxY = Math.max(maxY, c.y + c.h/2);
+  function renderList() {
+    const list = document.getElementById("list"); list.innerHTML = "";
+    const k = document.getElementById("search").value.toUpperCase();
+    const toShow = filteredComps.filter(c => c.ref.includes(k) || (c.val+c.name).toUpperCase().includes(k)).slice(0, 500);
+    if(!toShow.length) { list.innerHTML="<div style='padding:20px;text-align:center;color:#666'>当前层无数据</div>"; return;}
+    toShow.forEach(c => {
+      const div = document.createElement("div"); div.className = "item"; div.id = "i-"+c.ref;
+      const v = (c.val && c.val!=="-") ? c.val : c.name;
+      div.innerHTML = `<b>${c.ref}</b><span>${v||""} ${c.fp}</span>`;
+      div.onclick = () => highlight(c.ref);
+      list.appendChild(div);
     });
-    const pcbW = maxX - minX + 4; 
-    const pcbH = maxY - minY + 4;
-    const centerX = (minX + maxX) / 2;
-    const centerY = (minY + maxY) / 2;
-    const screenW = canvas.width / dpr;
-    const screenH = canvas.height / dpr;
-    const scale = Math.min(screenW / pcbW, screenH / pcbH) * 0.9;
-    
-    transform.k = scale;
-    transform.x = screenW/2 - centerX * scale;
-    transform.y = screenH/2 + centerY * scale; 
-    requestAnimationFrame(draw);
   }
 
-  function screenToWorld(sx, sy) {
-    const rect = canvas.getBoundingClientRect();
-    const px = sx - rect.left;
-    const py = sy - rect.top;
-    const worldX = (px - transform.x) / transform.k;
-    const worldY = (py - transform.y) / -transform.k;
-    return { x: worldX, y: worldY };
+  function fit() {
+    resize();
+    if(!filteredComps.length) { draw(); return; }
+    let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;
+    filteredComps.forEach(c=>{ x0=Math.min(x0,c.x-c.w/2); x1=Math.max(x1,c.x+c.w/2); y0=Math.min(y0,c.y-c.h/2); y1=Math.max(y1,c.y+c.h/2); });
+    const boardW = x1 - x0; const boardH = y1 - y0;
+    const screenW = cvs.width / dpr; const screenH = cvs.height / dpr;
+    const scale = Math.min(screenW / (boardW || 10), screenH / (boardH || 10)) * 0.9;
+    t.k = scale; t.x = screenW/2 - (x0 + x1)/2 * scale; t.y = screenH/2 + (y0 + y1)/2 * scale; 
+    draw();
   }
 
-  function draw(){
-    const width = canvas.width / dpr;
-    const height = canvas.height / dpr;
-    ctx.clearRect(0, 0, width, height);
-
+  function draw() {
+    const W = cvs.width/dpr, H = cvs.height/dpr;
+    ctx.clearRect(0,0,W,H);
+    if(!filteredComps.length && allComps.length > 0) {
+        ctx.save(); ctx.scale(1,1); ctx.font="20px Arial"; ctx.fillStyle="#999"; ctx.textAlign="center";
+        const curLayer = document.querySelector('input[name="layer"]:checked').value;
+        ctx.fillText(`当前层 (${curLayer === 'T' ? '顶层' : '底层'}) 无匹配元件`, W/2, H/2);
+        ctx.restore(); return;
+    }
     ctx.save();
-    ctx.translate(transform.x, transform.y);
-    ctx.scale(transform.k, -transform.k); 
-    ctx.lineWidth = 1 / transform.k; 
-
+    ctx.translate(t.x, t.y); ctx.scale(t.k, -t.k);
+    const curLayer = document.querySelector('input[name="layer"]:checked').value;
+    if(curLayer === 'B') ctx.scale(-1, 1);
     const mode = document.querySelector('input[name="mode"]:checked').value;
-
-    for (const c of comps) {
-      const isSelected = (c.ref === selectedRef);
+    filteredComps.forEach(c => {
+      const isSel = (c.ref === sel);
       ctx.save();
       ctx.translate(c.x, c.y);
-      ctx.rotate(c.angle * Math.PI / 180);
-      
-      if (isSelected) {
-        ctx.fillStyle = "rgba(255, 0, 0, 0.3)";
-        ctx.strokeStyle = "#ff0000";
-        ctx.lineWidth = 2 / transform.k;
-      } else {
-        ctx.fillStyle = "#fff";
-        ctx.strokeStyle = "#666";
-      }
-      ctx.fillRect(-c.w/2, -c.h/2, c.w, c.h);
-      ctx.strokeRect(-c.w/2, -c.h/2, c.w, c.h);
-      
-      ctx.beginPath();
-      ctx.arc(-c.w/2 + c.w*0.15, -c.h/2 + c.h*0.15, Math.min(c.w,c.h)*0.1, 0, 2*Math.PI);
-      ctx.fillStyle = isSelected ? "red" : "#ccc"; ctx.fill();
+      ctx.rotate(c.angle * Math.PI/180);
+      drawComponent(ctx, c, isSel);
       ctx.restore();
-
-      if (c.w * transform.k > 15) {
-        ctx.save();
-        ctx.translate(c.x, c.y);
-        ctx.scale(1, -1); 
+      if(c.w * t.k > 15) {
+        ctx.save(); ctx.translate(c.x, c.y); 
+        if(curLayer === 'B') ctx.scale(-1, 1); ctx.scale(1, -1); 
         let txt = c.ref;
-        if(mode === "value") {
-           // 逻辑：Value -> Comment -> Ref
-           const val = (c.value && c.value.trim() !== "" && c.value !== "-") ? c.value : 
-                       ((c.comment && c.comment.trim() !== "" && c.comment !== "-") ? c.comment : c.ref);
-           if(val) txt = val;
-        }
-        ctx.font = `bold ${12/transform.k}px Arial`;
-        // 字体大小限制 (防止无限大)
-        if(12/transform.k > 20) ctx.font = `bold 20px Arial`;
-        
-        ctx.fillStyle = isSelected ? "#d00" : "#333";
-        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        if(mode==="value") { const v = (c.val && c.val!=="-") ? c.val : c.name; if(v && v!=="-") txt = v; }
+        let fs = 12/t.k; if(fs>2) fs=2; if(fs<0.2) fs=0.2;
+        ctx.font = `bold ${fs}px Arial`; ctx.textAlign="center"; ctx.textBaseline="middle";
+        ctx.fillStyle = isSel ? "#d00" : "#333";
         ctx.fillText(txt, 0, 0);
         ctx.restore();
       }
-    }
+    });
     ctx.restore();
   }
 
-  // --- 事件监听 ---
-  canvas.addEventListener("wheel", e => {
-    e.preventDefault();
-    const rect = canvas.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
-    const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    transform.x = mx - (mx - transform.x) * delta;
-    transform.y = my - (my - transform.y) * delta;
-    transform.k *= delta;
-    requestAnimationFrame(draw);
-  }, { passive: false });
-
-  function startDrag(x, y) { isDragging = true; lastPos = { x, y }; }
-  function moveDrag(x, y) {
-    if (isDragging) {
-      transform.x += x - lastPos.x;
-      transform.y += y - lastPos.y;
-      lastPos = { x, y };
-      requestAnimationFrame(draw);
-    }
+  function resize() {
+    const r = cvs.parentElement.getBoundingClientRect();
+    const w = Math.floor(r.width * dpr), h = Math.floor(r.height * dpr);
+    if(cvs.width !== w || cvs.height !== h) { cvs.width = w; cvs.height = h; ctx.scale(dpr, dpr); }
+    cvs.style.width = r.width + "px"; cvs.style.height = r.height + "px";
   }
-  function endDrag() { isDragging = false; }
+  window.onresize = () => { resize(); draw(); };
+  setTimeout(resize, 100);
 
-  canvas.addEventListener("mousedown", e => startDrag(e.clientX, e.clientY));
-  window.addEventListener("mousemove", e => moveDrag(e.clientX, e.clientY));
-  window.addEventListener("mouseup", endDrag);
+  cvs.onwheel = e => { e.preventDefault(); const r=cvs.getBoundingClientRect(); zoom(e.clientX-r.left, e.clientY-r.top, e.deltaY>0?0.9:1.1); };
+  function zoom(mx,my,d) { t.x = mx-(mx-t.x)*d; t.y = my-(my-t.y)*d; t.k*=d; draw(); }
+  cvs.onmousedown = e => { drag=true; last={x:e.clientX,y:e.clientY}; };
+  window.onmousemove = e => { if(drag){ t.x+=e.clientX-last.x; t.y+=e.clientY-last.y; last={x:e.clientX,y:e.clientY}; draw(); } };
+  window.onmouseup = () => drag=false;
+  cvs.ontouchstart = e => { if(e.touches.length==1){drag=true;last={x:e.touches[0].clientX,y:e.touches[0].clientY}} else if(e.touches.length==2){drag=false;const t1=e.touches[0],t2=e.touches[1];lDist=Math.hypot(t2.clientX-t1.clientX,t2.clientY-t1.clientY)} };
+  cvs.ontouchmove = e => { e.preventDefault(); if(e.touches.length==1&&drag){t.x+=e.touches[0].clientX-last.x;t.y+=e.touches[0].clientY-last.y;last={x:e.touches[0].clientX,y:e.touches[0].clientY};draw();} else if(e.touches.length==2){const t1=e.touches[0],t2=e.touches[1],dist=Math.hypot(t2.clientX-t1.clientX,t2.clientY-t1.clientY),cx=(t1.clientX+t2.clientX)/2-cvs.getBoundingClientRect().left,cy=(t1.clientY+t2.clientY)/2-cvs.getBoundingClientRect().top;zoom(cx,cy,dist/lDist);lDist=dist;} };
 
-  canvas.addEventListener("touchstart", e => {
-    if(e.touches.length === 1) startDrag(e.touches[0].clientX, e.touches[0].clientY);
-    else if (e.touches.length === 2) {
-      isDragging = false;
-      const t1 = e.touches[0], t2 = e.touches[1];
-      lastDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
-    }
-  }, { passive: false });
+  let dX=0,dY=0;
+  const start=e=>{dX=e.clientX||e.touches[0].clientX;dY=e.clientY||e.touches[0].clientY};
+  const end=e=>{const cx=e.clientX||e.changedTouches[0].clientX,cy=e.clientY||e.changedTouches[0].clientY;if(Math.hypot(cx-dX,cy-dY)<10) hit(cx,cy)};
+  cvs.addEventListener("mousedown",start); cvs.addEventListener("mouseup",end);
+  cvs.addEventListener("touchstart",start); cvs.addEventListener("touchend",end);
 
-  canvas.addEventListener("touchmove", e => {
-    e.preventDefault();
-    if(e.touches.length === 1) moveDrag(e.touches[0].clientX, e.touches[0].clientY);
-    else if (e.touches.length === 2) {
-      const t1 = e.touches[0], t2 = e.touches[1];
-      const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
-      const cx = (t1.clientX + t2.clientX) / 2 - canvas.getBoundingClientRect().left;
-      const cy = (t1.clientY + t2.clientY) / 2 - canvas.getBoundingClientRect().top;
-      const delta = dist / lastDist;
-      lastDist = dist;
-      transform.x = cx - (cx - transform.x) * delta;
-      transform.y = cy - (cy - transform.y) * delta;
-      transform.k *= delta;
-      requestAnimationFrame(draw);
-    }
-  }, { passive: false });
-  canvas.addEventListener("touchend", endDrag);
+  function hit(sx, sy) {
+    const r = cvs.getBoundingClientRect();
+    const curLayer = document.querySelector('input[name="layer"]:checked').value;
+    let px = sx - r.left - t.x;
+    let py = sy - r.top - t.y;
+    if(curLayer === 'B') px = -px; 
+    const wx = px / t.k;
+    const wy = py / -t.k;
+    let h = null;
+    for(let c of filteredComps) { if(Math.abs(wx-c.x)<=c.w/2 && Math.abs(wy-c.y)<=c.h/2) { h=c; break; } }
+    highlight(h ? h.ref : null);
+  }
 
-  let downX=0, downY=0;
-  canvas.addEventListener("mousedown", e=>{ downX=e.clientX; downY=e.clientY; });
-  canvas.addEventListener("mouseup", e=>{
-    if(Math.abs(e.clientX-downX)<5 && Math.abs(e.clientY-downY)<5) handleClick(e.clientX, e.clientY);
-  });
-  let tDownX=0, tDownY=0;
-  canvas.addEventListener("touchstart", e=>{ if(e.touches.length===1){ tDownX=e.touches[0].clientX; tDownY=e.touches[0].clientY;} });
-  canvas.addEventListener("touchend", e=>{
-    if(e.changedTouches.length===1){
-      const tx = e.changedTouches[0].clientX, ty = e.changedTouches[0].clientY;
-      if(Math.abs(tx-tDownX)<10 && Math.abs(ty-tDownY)<10) handleClick(tx, ty);
-    }
-  });
-
-  function handleClick(sx, sy) {
-    const p = screenToWorld(sx, sy);
-    let hit = null;
-    for(const c of comps) {
-      if (Math.abs(p.x - c.x) <= c.w/2 && Math.abs(p.y - c.y) <= c.h/2) { hit = c; break; }
-    }
-    if(hit) highlight(hit.ref);
-    else { selectedRef=null; requestAnimationFrame(draw); renderList(comps); }
+  // 【关键修改】显示 Name
+  function updateInfo(c) {
+    const p = document.getElementById("info-panel");
+    if(!c) { p.innerHTML = "<div style='color:#666;text-align:center;margin-top:40px;'>选中元件查看详情</div>"; return; }
+    // 这里的备注改成了 Name
+    const rows = [ ["位号",c.ref], ["值",c.val], ["Name",c.name], ["封装",c.fp], ["坐标",`${c.x}, ${c.y}`], ["角度",c.angle+"°"], ["层级",c.layer==='T'?"Top":"Bottom"] ];
+    let html = ""; rows.forEach(([k,v]) => { html += `<div class="info-row"><div class="info-label">${k}</div><div class="info-val">${v||'-'}</div></div>`; });
+    p.innerHTML = html;
   }
 
   function highlight(ref) {
-    selectedRef = ref;
-    requestAnimationFrame(draw);
-    const item = document.getElementById("item-"+ref);
-    if(item) {
-      document.querySelectorAll(".comp-item.active").forEach(el=>el.classList.remove("active"));
-      item.classList.add("active");
-      item.scrollIntoView({ behavior: "smooth", block: "nearest" });
-      const c = comps.find(x=>x.ref===ref);
+    sel = ref; draw();
+    const el = document.getElementById("i-"+ref);
+    if(el) {
+      document.querySelectorAll(".active").forEach(e=>e.classList.remove("active"));
+      el.classList.add("active");
+      el.scrollIntoView({block:"nearest"});
+      const c = filteredComps.find(x => x.ref === ref);
       updateInfo(c);
     }
   }
 
-  document.getElementById("reset-btn").onclick = fitView;
-  fitView();
-  return highlight;
+  document.getElementById("reset").onclick = fit;
+  return { load: ()=>{ updateFilter(); fit(); }, update: updateFilter, highlight: highlight };
 }
 
-// ========== 3. 文件处理与 UI ==========
-const fileInput = document.getElementById("file");
-const searchInput = document.getElementById("search");
-const listContainer = document.getElementById("list-container");
-const infoPanel = document.getElementById("info-panel");
-let allComps = [];
-let setHighlight = null;
+// ========== 5. Init ==========
+let comps = [];
+let viewer = null;
+const fileIn = document.getElementById("file");
 
-document.querySelectorAll('input[name="mode"]').forEach(r => {
-  r.addEventListener('change', () => { if(allComps.length && setHighlight) setHighlight(null); });
-});
-
-fileInput.addEventListener("change", e => {
+fileIn.onchange = e => {
   const f = e.target.files[0];
   if(!f) return;
-  document.querySelector('.btn').textContent = "正在处理...";
-  
-  const reader = new FileReader();
-  
-  reader.onload = (e) => {
-    const data = e.target.result;
+  const r = new FileReader();
+  r.onload = evt => {
     let rows = [];
-
-    // 判断是 Excel 还是 CSV
-    if (f.name.endsWith('.xlsx') || f.name.endsWith('.xls')) {
-      // Excel 模式
-      try {
-        const workbook = XLSX.read(data, {type: 'array'});
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        // 转换成二维数组 [[A1,B1..],[A2,B2..]]
-        rows = XLSX.utils.sheet_to_json(worksheet, {header: 1});
-      } catch (err) {
-        alert("Excel 解析失败，请检查文件是否加密");
-        document.querySelector('.btn').textContent = "导入失败";
-        return;
-      }
+    const d = evt.target.result;
+    if(f.name.match(/\.xls/)) {
+      try { const wb=XLSX.read(d,{type:'array'}); rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1}); } 
+      catch(e){alert("Excel读取失败");return;}
     } else {
-      // CSV/Text 模式
-      const decoder = new TextDecoder("utf-8"); // 简单处理，假设 UTF-8
-      // 兼容之前的解码逻辑
-      let text = "";
-      const bytes = new Uint8Array(data);
-      if (bytes.length >= 2 && bytes[0]===0xFF && bytes[1]===0xFE) {
-        for (let i=2;i+1<bytes.length;i+=2) text += String.fromCharCode(bytes[i]|(bytes[i+1]<<8));
-      } else {
-        text = decoder.decode(bytes);
-      }
-      
-      // 转成二维数组
-      const lines = text.split(/\r?\n/).filter(l => l.trim() !== "");
-      // 自动判断分隔符
-      if(lines.length > 0) {
-          const l0 = lines[0];
-          const delim = l0.includes("\t") ? "\t" : (l0.includes(";") ? ";" : ",");
-          rows = lines.map(l => l.split(delim).map(s => s.trim()));
-      }
+      const txt = new TextDecoder().decode(new Uint8Array(d));
+      rows = txt.split(/\r?\n/).map(l=>l.split(/,|\t/));
     }
-
-    // 统一处理
-    allComps = processRows(rows);
+    comps = parseRows(rows);
+    if(!comps.length) return alert("未找到数据 (请检查Layer列)");
+    viewer = makeViewer(comps);
+    viewer.load();
     document.querySelector('.btn').textContent = "📂 " + f.name;
-    
-    if(!allComps.length) { 
-      alert("未识别到元件数据。请确保文件包含 Designator(Ref), Mid X, Mid Y 列"); 
-      return; 
-    }
-    
-    setHighlight = makeViewer(allComps);
-    renderList(allComps);
   };
-  
-  reader.readAsArrayBuffer(f);
+  r.readAsArrayBuffer(f);
+};
+
+document.querySelectorAll('input[type="radio"]').forEach(r => {
+  r.addEventListener('change', () => { if(viewer) viewer.update(); });
 });
-
-function renderList(comps){
-  listContainer.innerHTML = "";
-  if(!comps.length) { listContainer.innerHTML="<div style='padding:20px;text-align:center;color:#666'>无</div>"; return; }
-  const renderLimit = comps.length > 2000 ? 500 : comps.length;
-  for(let i=0; i<renderLimit; i++){
-    const c = comps[i];
-    const d = document.createElement("div"); d.className="comp-item"; d.id="item-"+c.ref;
-    // 列表显示：位号 + (Value优先 > Comment)
-    const val = (c.value && c.value.trim()!== "" && c.value!=="-") ? c.value : c.comment;
-    d.innerHTML = `<span class="comp-ref">${c.ref}</span><span class="comp-desc">${val||""} ${c.footprint||""}</span>`;
-    d.onclick = () => { if(setHighlight) setHighlight(c.ref); };
-    listContainer.appendChild(d);
-  }
-}
-
-searchInput.addEventListener("input", e=>{
-  const kw = e.target.value.trim().toUpperCase();
-  const f = allComps.filter(c=> 
-    c.ref.includes(kw) || 
-    (c.value && c.value.toUpperCase().includes(kw)) ||
-    (c.comment && c.comment.toUpperCase().includes(kw))
-  );
-  renderList(f);
-});
-
-function updateInfo(c){
-  if(!c) return;
-  const rows = [["位号",c.ref],["值",c.value],["备注",c.comment],["封装",c.footprint],["坐标",`${c.x},${c.y}`]];
-  let h = ""; rows.forEach(([k,v])=>h+=`<div class="info-row"><div class="info-label">${k}</div><div class="info-val">${v||'-'}</div></div>`);
-  infoPanel.innerHTML = h;
-}
+document.getElementById("search").oninput = () => { if(viewer) viewer.update(); };
 </script>
 </body>
 </html>
