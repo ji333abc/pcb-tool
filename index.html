@@ -3,7 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>PCB 焊接助手 (移动端适配版)</title>
+<title>PCB 焊接助手 (Excel/CSV 全能版)</title>
+<!-- 引入 SheetJS 用于解析 Excel -->
+<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+
 <style>
   :root {
     --sidebar-bg: #2b2d30;
@@ -12,92 +15,58 @@
     --selected-bg: #2675bf;
     --canvas-bg: #f0f2f5;
   }
-
   * { box-sizing: border-box; }
-
   body {
     margin: 0; padding: 0;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    height: 100vh;
-    display: flex;
-    overflow: hidden;
-    background-color: var(--canvas-bg);
+    height: 100vh; display: flex; overflow: hidden; background-color: var(--canvas-bg);
   }
 
-  /* === 侧边栏 (PC端) === */
+  /* 侧边栏 */
   aside {
-    width: 320px;
-    background-color: var(--sidebar-bg);
-    color: var(--sidebar-text);
-    display: flex;
-    flex-direction: column;
-    border-right: 1px solid #1e1e1e;
-    z-index: 20;
-    transition: all 0.3s;
+    width: 320px; background-color: var(--sidebar-bg); color: var(--sidebar-text);
+    display: flex; flex-direction: column; border-right: 1px solid #1e1e1e; z-index: 20;
   }
-
   .header { padding: 10px; background-color: #1e1f22; border-bottom: 1px solid #3e4145; }
   h2 { margin: 0 0 8px 0; font-size: 16px; color: #fff; }
-
   .view-mode { display: flex; gap: 10px; margin-bottom: 8px; font-size: 12px; color: #fff; }
-  .view-mode label { display: flex; align-items: center; }
-
+  .view-mode label { display: flex; align-items: center; cursor: pointer; }
+  .view-mode input { margin-right: 4px; }
   .file-upload { position: relative; overflow: hidden; margin-bottom: 8px; }
-  .file-upload input { position: absolute; left: 0; top: 0; opacity: 0; width: 100%; height: 100%; }
-  .btn { display: block; background-color: var(--accent-color); color: white; text-align: center; padding: 8px; border-radius: 4px; font-size: 14px; }
-  
+  .file-upload input { position: absolute; left: 0; top: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
+  .btn { display: block; background-color: var(--accent-color); color: white; text-align: center; padding: 8px; border-radius: 4px; font-size: 14px; transition: 0.2s; }
+  .btn:hover { opacity: 0.9; }
   #search { width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #555; background: #1e1f22; color: #fff; }
-
   #list-container { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
-  
   .comp-item { padding: 10px; border-bottom: 1px solid #3e4145; display: flex; flex-direction: column; cursor: pointer; }
   .comp-item.active { background-color: var(--selected-bg); color: #fff; }
   .comp-ref { font-weight: bold; font-size: 15px; }
   .comp-desc { font-size: 12px; opacity: 0.8; margin-top: 2px; }
-
   #info-panel { padding: 10px; background: #1e1f22; border-top: 1px solid #3e4145; font-size: 12px; height: 140px; overflow-y: auto; }
   .info-row { display: flex; margin-bottom: 4px; border-bottom: 1px dashed #444; }
   .info-label { width: 60px; color: #888; }
   .info-val { flex: 1; color: #ddd; word-break: break-all; }
 
-  /* === 画布区域 === */
+  /* 画布 */
   main {
-    flex: 1;
-    position: relative;
-    overflow: hidden;
+    flex: 1; position: relative; overflow: hidden;
     background-image: radial-gradient(#ccc 1px, transparent 1px);
-    background-size: 20px 20px;
-    touch-action: none; /* 禁止浏览器默认缩放 */
+    background-size: 20px 20px; touch-action: none;
   }
-
   canvas { display: block; width: 100%; height: 100%; }
-
-  /* 复位按钮 */
   #reset-btn {
     position: absolute; top: 10px; right: 10px;
-    background: white; border: 1px solid #999;
-    padding: 5px 10px; border-radius: 4px;
-    font-size: 12px; cursor: pointer;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-    z-index: 5;
+    background: white; border: 1px solid #999; padding: 5px 10px;
+    border-radius: 4px; font-size: 12px; cursor: pointer;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2); z-index: 5;
   }
 
-  /* === 移动端响应式布局 === */
+  /* 响应式 */
   @media (max-width: 768px) {
-    body { flex-direction: column-reverse; } /* 列表在下，图在上 */
-    
-    aside {
-      width: 100%;
-      height: 45%; /* 列表占据下方 45% */
-      border-right: none;
-      border-top: 1px solid #3e4145;
-    }
-    
-    main { height: 55%; } /* 图占据上方 55% */
-    
-    /* 调整手机上的字体和间距 */
-    .comp-item { padding: 8px 12px; }
-    #info-panel { height: 100px; display: none; } /* 手机屏太小，暂时隐藏详细信息，只看列表 */
+    body { flex-direction: column-reverse; }
+    aside { width: 100%; height: 45%; border-right: none; border-top: 1px solid #3e4145; }
+    main { height: 55%; }
+    #info-panel { display: none; }
   }
 </style>
 </head>
@@ -107,8 +76,9 @@
   <div class="header">
     <h2>PCB 焊接助手</h2>
     <div class="file-upload">
-      <div class="btn">📂 导入 CSV 坐标文件</div>
-      <input type="file" id="file" accept=".csv,.tsv,.txt">
+      <!-- 接受 xlsx, xls, csv, txt -->
+      <div class="btn">📂 导入文件 (Excel / CSV)</div>
+      <input type="file" id="file" accept=".csv,.tsv,.txt,.xlsx,.xls">
     </div>
     
     <div class="view-mode">
@@ -120,13 +90,13 @@
   </div>
 
   <div id="list-container">
-    <div style="padding:20px; text-align:center; opacity:0.5;">请先导入文件</div>
+    <div style="padding:20px; text-align:center; opacity:0.5;">支持 Excel (.xlsx/.xls) 和 CSV</div>
   </div>
 
   <div id="info-panel">
     <div style="color:#aaa; padding-top:10px">
-      PC: 滚轮缩放 / 拖拽平移<br>
-      Mobile: 双指缩放 / 单指平移
+      支持 Excel 直接导入<br>
+      滚轮/双指缩放，拖拽平移
     </div>
   </div>
 </aside>
@@ -137,18 +107,9 @@
 </main>
 
 <script>
-// ========== 1. 数据解析 (保持核心逻辑不变) ==========
-function decodeFileText(buf){
-  const bytes = new Uint8Array(buf);
-  if (bytes.length >= 2 && bytes[0] === 0xFF && bytes[1] === 0xFE) {
-    let out = ""; for (let i = 2; i + 1 < bytes.length; i += 2) out += String.fromCharCode(bytes[i] | (bytes[i+1] << 8)); return out;
-  }
-  if (bytes.length >= 2 && bytes[0] === 0xFE && bytes[1] === 0xFF) {
-    let out = ""; for (let i = 2; i + 1 < bytes.length; i += 2) out += String.fromCharCode((bytes[i] << 8) | bytes[i+1]); return out;
-  }
-  return new TextDecoder("utf-8").decode(bytes);
-}
+// ========== 1. 数据解析 (统一处理 CSV 和 Excel) ==========
 
+// 封装估算尺寸
 function estimateSize(footprint){
   const fp = (footprint || "").toUpperCase();
   let mL = fp.match(/L([\d.]+)/), mW = fp.match(/W([\d.]+)/);
@@ -163,16 +124,29 @@ function estimateSize(footprint){
   return { w:2.0, h:1.0 };
 }
 
-function parseCSV(text){
-  text = text.replace(/\u0000/g,"");
-  const lines = text.split(/\r?\n/).filter(l => l.trim() !== "");
-  if (lines.length < 2) return [];
-  let headerLine = lines[0].replace(/^\uFEFF/,"");
-  let delim = headerLine.includes("\t") ? "\t" : (headerLine.includes(";") ? ";" : ",");
-  const rawHeader = headerLine.split(delim).map(s => s.trim());
-  const headerNorm = rawHeader.map(h => h.toLowerCase());
+// 核心逻辑：无论是 CSV 还是 Excel，最终都转成“行数组”来处理
+function processRows(rows) {
+  if (!rows || rows.length < 2) return [];
+
+  // 1. 寻找表头行 (有时 Excel 第一行是标题，第二行才是表头)
+  // 我们找包含 "Designator" 或 "Ref" 或 "Mid X" 的那一行
+  let headerIndex = 0;
+  let headerNorm = [];
   
+  for(let i=0; i<Math.min(rows.length, 5); i++) {
+    const rowStr = rows[i].join(" ").toLowerCase();
+    if(rowStr.includes("designator") || rowStr.includes("mid x") || rowStr.includes("mid_x")) {
+      headerIndex = i;
+      headerNorm = rows[i].map(x => String(x).trim().toLowerCase());
+      break;
+    }
+  }
+
+  // 如果没找到明显的表头，默认用第0行
+  if(headerNorm.length === 0) headerNorm = rows[0].map(x => String(x).trim().toLowerCase());
+
   const findCol = keys => headerNorm.findIndex(h => keys.some(k => h.includes(k)));
+  
   const iRef = findCol(["designator","ref"]);
   const iMidX = findCol(["mid x","x(mm)","mid_x"]);
   const iMidY = findCol(["mid y","y(mm)","mid_y"]);
@@ -183,47 +157,56 @@ function parseCSV(text){
   const iLayer = findCol(["layer","层"]);
 
   if (iRef < 0 || iMidX < 0 || iMidY < 0) return [];
+
   const num = str => (!str) ? NaN : parseFloat(String(str).replace(/mm/gi,"").replace(/[^\d.+\-eE]/g,""));
 
   const comps = [];
-  for (let li = 1; li < lines.length; li++) {
-    const row = lines[li].split(delim).map(s => s.trim());
-    if(!row[iRef]) continue;
-    // 默认只显示 Top 层 (如果没层信息默认显示)
+  // 从表头下一行开始遍历
+  for (let li = headerIndex + 1; li < rows.length; li++) {
+    const row = rows[li];
+    if (!row || row.length === 0) continue;
+
+    const ref = row[iRef]; 
+    if(!ref) continue;
+
+    // 只要顶层
     if(iLayer >= 0) {
-        const l = (row[iLayer] || "").toUpperCase();
+        const l = String(row[iLayer] || "").toUpperCase();
         if(l.startsWith("B")) continue;
     }
+
     const x = num(row[iMidX]), y = num(row[iMidY]);
     if (isNaN(x) || isNaN(y)) continue;
+    
     let angle = iRot >= 0 ? num(row[iRot]) : 0;
     
-    const sz = estimateSize(iFp >=0 ? row[iFp] : "");
+    const fpStr = iFp >= 0 ? String(row[iFp] || "") : "";
+    const sz = estimateSize(fpStr);
+    
     comps.push({
-      ref: row[iRef], x, y, angle: isNaN(angle)?0:angle,
+      ref: String(ref), 
+      x, y, 
+      angle: isNaN(angle)?0:angle,
       w: sz.w, h: sz.h,
-      comment: iCom>=0 ? row[iCom] : "",
-      value: iVal>=0 ? row[iVal] : "",
-      footprint: iFp>=0 ? row[iFp] : ""
+      comment: iCom>=0 ? String(row[iCom] || "") : "",
+      value: iVal>=0 ? String(row[iVal] || "") : "",
+      footprint: fpStr
     });
   }
   return comps;
 }
 
-// ========== 2. 交互式查看器 (核心升级) ==========
+// ========== 2. 交互式 Viewer (保持之前的完美逻辑) ==========
 function makeViewer(comps){
   const canvas = document.getElementById("pcb");
   const ctx = canvas.getContext("2d");
   const dpr = window.devicePixelRatio || 1;
-
-  // 视图状态
-  let transform = { k: 15, x: 0, y: 0 }; // k: 缩放比例, x/y: 平移偏移量
+  let transform = { k: 15, x: 0, y: 0 };
   let selectedRef = null;
   let isDragging = false;
   let lastPos = { x: 0, y: 0 };
-  let lastDist = 0; // 双指距离
+  let lastDist = 0; 
 
-  // 初始化 Canvas 尺寸
   function resize() {
     const rect = canvas.parentElement.getBoundingClientRect();
     canvas.width = rect.width * dpr;
@@ -236,7 +219,6 @@ function makeViewer(comps){
   window.addEventListener('resize', resize);
   resize();
 
-  // 自动适应视图
   function fitView(){
     if(!comps.length) return;
     let minX=1e9, maxX=-1e9, minY=1e9, maxY=-1e9;
@@ -244,53 +226,24 @@ function makeViewer(comps){
       minX = Math.min(minX, c.x - c.w/2); maxX = Math.max(maxX, c.x + c.w/2);
       minY = Math.min(minY, c.y - c.h/2); maxY = Math.max(maxY, c.y + c.h/2);
     });
-    // PCB 物理尺寸
-    const pcbW = maxX - minX + 4; // 加点边距
+    const pcbW = maxX - minX + 4; 
     const pcbH = maxY - minY + 4;
     const centerX = (minX + maxX) / 2;
     const centerY = (minY + maxY) / 2;
-
-    // 屏幕尺寸
     const screenW = canvas.width / dpr;
     const screenH = canvas.height / dpr;
-
-    // 计算缩放
     const scale = Math.min(screenW / pcbW, screenH / pcbH) * 0.9;
     
     transform.k = scale;
-    // 计算平移：使 PCB 中心 对齐 屏幕中心
-    // 屏幕中心 = (PCB中心 * 缩放) + 偏移
-    // 偏移 = 屏幕中心 - (PCB中心 * 缩放)
-    // 注意：Y轴是翻转的，原始坐标 y 向上，屏幕 y 向下
-    // 这里我们先统一逻辑：draw的时候再处理 Y 翻转
     transform.x = screenW/2 - centerX * scale;
-    transform.y = screenH/2 + centerY * scale; // Y轴反转特例处理
-
+    transform.y = screenH/2 + centerY * scale; 
     requestAnimationFrame(draw);
   }
 
-  // 坐标转换：屏幕像素 -> PCB 物理坐标
   function screenToWorld(sx, sy) {
     const rect = canvas.getBoundingClientRect();
     const px = sx - rect.left;
     const py = sy - rect.top;
-    
-    // 逆运算
-    // drawX = worldX * k + tx
-    // worldX = (drawX - tx) / k
-    const wx = (px - transform.x) / transform.k;
-    // drawY = height - (worldY * k + ty)  <-- Y轴翻转逻辑
-    // worldY * k = height - drawY - ty
-    // worldY = (height - drawY - ty) / k  
-    // 等等，我们在 draw 里用的变换矩阵是简单的 translate/scale
-    // 让我们在 draw 函数里看仔细：
-    // ctx.translate(transform.x, transform.y);
-    // ctx.scale(transform.k, -transform.k); // 翻转Y
-    
-    // 所以：
-    // px = wx * k + tx
-    // py = wy * (-k) + ty
-    
     const worldX = (px - transform.x) / transform.k;
     const worldY = (py - transform.y) / -transform.k;
     return { x: worldX, y: worldY };
@@ -299,34 +252,21 @@ function makeViewer(comps){
   function draw(){
     const width = canvas.width / dpr;
     const height = canvas.height / dpr;
-    
     ctx.clearRect(0, 0, width, height);
-    
-    // 绘制网格背景 (可选)
-    ctx.save();
-    ctx.strokeStyle = "#e5e5e5";
-    ctx.lineWidth = 1;
-    const gridSize = 10 * transform.k;
-    /* 省略网格绘制以保持性能，如果需要可以加 */
-    ctx.restore();
 
     ctx.save();
-    // === 应用变换矩阵 ===
     ctx.translate(transform.x, transform.y);
-    ctx.scale(transform.k, -transform.k); // Y轴向上为正，屏幕向下为正，所以 Scale Y = -k
-
-    ctx.lineWidth = 1 / transform.k; // 保持线宽恒定
+    ctx.scale(transform.k, -transform.k); 
+    ctx.lineWidth = 1 / transform.k; 
 
     const mode = document.querySelector('input[name="mode"]:checked').value;
 
     for (const c of comps) {
       const isSelected = (c.ref === selectedRef);
-      
       ctx.save();
       ctx.translate(c.x, c.y);
       ctx.rotate(c.angle * Math.PI / 180);
       
-      // 本体
       if (isSelected) {
         ctx.fillStyle = "rgba(255, 0, 0, 0.3)";
         ctx.strokeStyle = "#ff0000";
@@ -335,43 +275,31 @@ function makeViewer(comps){
         ctx.fillStyle = "#fff";
         ctx.strokeStyle = "#666";
       }
-      
       ctx.fillRect(-c.w/2, -c.h/2, c.w, c.h);
       ctx.strokeRect(-c.w/2, -c.h/2, c.w, c.h);
       
-      // 1脚
       ctx.beginPath();
       ctx.arc(-c.w/2 + c.w*0.15, -c.h/2 + c.h*0.15, Math.min(c.w,c.h)*0.1, 0, 2*Math.PI);
-      ctx.fillStyle = isSelected ? "red" : "#ccc";
-      ctx.fill();
-      
+      ctx.fillStyle = isSelected ? "red" : "#ccc"; ctx.fill();
       ctx.restore();
 
-      // 文字 (保持不旋转且大小合适)
-      // 只有当器件在屏幕上足够大才显示文字
       if (c.w * transform.k > 15) {
         ctx.save();
         ctx.translate(c.x, c.y);
-        ctx.scale(1, -1); // 把文字再翻转回来，变成正的
-
-        // 智能显示内容
+        ctx.scale(1, -1); 
         let txt = c.ref;
         if(mode === "value") {
-           const val = (c.value && c.value !== "-") ? c.value : c.comment;
-           if(val && val.trim() !== "") txt = val;
+           // 逻辑：Value -> Comment -> Ref
+           const val = (c.value && c.value.trim() !== "" && c.value !== "-") ? c.value : 
+                       ((c.comment && c.comment.trim() !== "" && c.comment !== "-") ? c.comment : c.ref);
+           if(val) txt = val;
         }
-
-        // 字体处理：视图缩放很大时，字体大小要受限，不能无限大
-        // 基础字号 12px / transform.k (在物理空间的大小) -> 投影回屏幕就是 12px
-        let fontSize = 12 / transform.k; 
-        // 修正：我们希望文字在屏幕上看起来差不多大，或者随缩放稍微变大
-        // 直接设置屏幕像素字号，然后除去 scale
-        // 我们希望屏幕上文字大约 10-12px
         ctx.font = `bold ${12/transform.k}px Arial`;
+        // 字体大小限制 (防止无限大)
+        if(12/transform.k > 20) ctx.font = `bold 20px Arial`;
         
         ctx.fillStyle = isSelected ? "#d00" : "#333";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
         ctx.fillText(txt, 0, 0);
         ctx.restore();
       }
@@ -379,160 +307,104 @@ function makeViewer(comps){
     ctx.restore();
   }
 
-  // ========== 事件监听 (鼠标 + 触摸) ==========
-
-  // 1. 鼠标滚轮缩放
+  // --- 事件监听 ---
   canvas.addEventListener("wheel", e => {
     e.preventDefault();
     const rect = canvas.getBoundingClientRect();
     const mx = e.clientX - rect.left;
     const my = e.clientY - rect.top;
-    
-    const delta = e.deltaY > 0 ? 0.9 : 1.1; // 缩放系数
-    
-    // 以鼠标为中心缩放公式：
-    // new_tx = mx - (mx - tx) * delta
+    const delta = e.deltaY > 0 ? 0.9 : 1.1;
     transform.x = mx - (mx - transform.x) * delta;
     transform.y = my - (my - transform.y) * delta;
     transform.k *= delta;
-    
     requestAnimationFrame(draw);
   }, { passive: false });
 
-  // 2. 鼠标/单指 拖拽
-  function startDrag(x, y) {
-    isDragging = true;
-    lastPos = { x, y };
-  }
-  
+  function startDrag(x, y) { isDragging = true; lastPos = { x, y }; }
   function moveDrag(x, y) {
     if (isDragging) {
-      const dx = x - lastPos.x;
-      const dy = y - lastPos.y;
-      transform.x += dx;
-      transform.y += dy;
+      transform.x += x - lastPos.x;
+      transform.y += y - lastPos.y;
       lastPos = { x, y };
       requestAnimationFrame(draw);
     }
   }
-
   function endDrag() { isDragging = false; }
 
-  // 鼠标事件
   canvas.addEventListener("mousedown", e => startDrag(e.clientX, e.clientY));
   window.addEventListener("mousemove", e => moveDrag(e.clientX, e.clientY));
   window.addEventListener("mouseup", endDrag);
 
-  // 触摸事件 (支持双指缩放)
   canvas.addEventListener("touchstart", e => {
-    if(e.touches.length === 1) {
-      startDrag(e.touches[0].clientX, e.touches[0].clientY);
-    } else if (e.touches.length === 2) {
-      // 双指开始
+    if(e.touches.length === 1) startDrag(e.touches[0].clientX, e.touches[0].clientY);
+    else if (e.touches.length === 2) {
       isDragging = false;
-      const t1 = e.touches[0];
-      const t2 = e.touches[1];
+      const t1 = e.touches[0], t2 = e.touches[1];
       lastDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
     }
   }, { passive: false });
 
   canvas.addEventListener("touchmove", e => {
-    e.preventDefault(); // 防止滚动页面
-    if(e.touches.length === 1) {
-      moveDrag(e.touches[0].clientX, e.touches[0].clientY);
-    } else if (e.touches.length === 2) {
-      // 双指缩放
-      const t1 = e.touches[0];
-      const t2 = e.touches[1];
+    e.preventDefault();
+    if(e.touches.length === 1) moveDrag(e.touches[0].clientX, e.touches[0].clientY);
+    else if (e.touches.length === 2) {
+      const t1 = e.touches[0], t2 = e.touches[1];
       const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
-      
-      // 中心点
       const cx = (t1.clientX + t2.clientX) / 2 - canvas.getBoundingClientRect().left;
       const cy = (t1.clientY + t2.clientY) / 2 - canvas.getBoundingClientRect().top;
-
       const delta = dist / lastDist;
       lastDist = dist;
-
       transform.x = cx - (cx - transform.x) * delta;
       transform.y = cy - (cy - transform.y) * delta;
       transform.k *= delta;
-
       requestAnimationFrame(draw);
     }
   }, { passive: false });
-
   canvas.addEventListener("touchend", endDrag);
 
-  // 点击选中逻辑
-  canvas.addEventListener("click", e => {
-    // 如果刚刚发生了拖动，则不认为是点击
-    // 这里简单处理，如果想做细可以判断 down 和 up 的距离
-    // 暂且直接判定
-  });
-  
-  // 独立的点击判定（为了不和拖拽冲突，用 MouseUp 且位移很小来判定）
   let downX=0, downY=0;
   canvas.addEventListener("mousedown", e=>{ downX=e.clientX; downY=e.clientY; });
   canvas.addEventListener("mouseup", e=>{
-    if(Math.abs(e.clientX-downX)<5 && Math.abs(e.clientY-downY)<5){
-      // 认为是点击
-      handleClick(e.clientX, e.clientY);
-    }
+    if(Math.abs(e.clientX-downX)<5 && Math.abs(e.clientY-downY)<5) handleClick(e.clientX, e.clientY);
   });
-  
-  // 触摸点击
   let tDownX=0, tDownY=0;
   canvas.addEventListener("touchstart", e=>{ if(e.touches.length===1){ tDownX=e.touches[0].clientX; tDownY=e.touches[0].clientY;} });
   canvas.addEventListener("touchend", e=>{
     if(e.changedTouches.length===1){
-      const tx = e.changedTouches[0].clientX;
-      const ty = e.changedTouches[0].clientY;
-      if(Math.abs(tx-tDownX)<10 && Math.abs(ty-tDownY)<10){
-        handleClick(tx, ty);
-      }
+      const tx = e.changedTouches[0].clientX, ty = e.changedTouches[0].clientY;
+      if(Math.abs(tx-tDownX)<10 && Math.abs(ty-tDownY)<10) handleClick(tx, ty);
     }
   });
 
   function handleClick(sx, sy) {
     const p = screenToWorld(sx, sy);
-    // 寻找最近的元件
     let hit = null;
-    // 简单的矩形判定，忽略旋转
     for(const c of comps) {
-      if (Math.abs(p.x - c.x) <= c.w/2 && Math.abs(p.y - c.y) <= c.h/2) {
-        hit = c;
-        break; // 找到一个就停，或者找最近的
-      }
+      if (Math.abs(p.x - c.x) <= c.w/2 && Math.abs(p.y - c.y) <= c.h/2) { hit = c; break; }
     }
-    
     if(hit) highlight(hit.ref);
     else { selectedRef=null; requestAnimationFrame(draw); renderList(comps); }
   }
 
-  // 对外接口
   function highlight(ref) {
     selectedRef = ref;
     requestAnimationFrame(draw);
-    
-    // 列表联动
     const item = document.getElementById("item-"+ref);
     if(item) {
       document.querySelectorAll(".comp-item.active").forEach(el=>el.classList.remove("active"));
       item.classList.add("active");
-      item.scrollIntoView({ behavior: "smooth", block: "nearest" }); // mobile上center可能遮挡
-      
+      item.scrollIntoView({ behavior: "smooth", block: "nearest" });
       const c = comps.find(x=>x.ref===ref);
       updateInfo(c);
     }
   }
 
   document.getElementById("reset-btn").onclick = fitView;
-
   fitView();
   return highlight;
 }
 
-// ========== 3. UI 逻辑 ==========
+// ========== 3. 文件处理与 UI ==========
 const fileInput = document.getElementById("file");
 const searchInput = document.getElementById("search");
 const listContainer = document.getElementById("list-container");
@@ -540,41 +412,83 @@ const infoPanel = document.getElementById("info-panel");
 let allComps = [];
 let setHighlight = null;
 
-// 监听模式切换
 document.querySelectorAll('input[name="mode"]').forEach(r => {
-  r.addEventListener('change', () => {
-    // 触发一次重绘，简单办法是复位或者模拟点击
-    // 由于重绘逻辑在 makeViewer 闭包里，这里我们最好重新触发 fit 或者 expose redraw
-    // 偷懒做法：重新生成一次 (性能消耗不大)
-    if(allComps.length && setHighlight) setHighlight(null); // 只是为了重绘
-  });
+  r.addEventListener('change', () => { if(allComps.length && setHighlight) setHighlight(null); });
 });
 
 fileInput.addEventListener("change", e => {
   const f = e.target.files[0];
   if(!f) return;
+  document.querySelector('.btn').textContent = "正在处理...";
+  
   const reader = new FileReader();
-  reader.onload = () => {
-    allComps = parseCSV(decodeFileText(reader.result));
+  
+  reader.onload = (e) => {
+    const data = e.target.result;
+    let rows = [];
+
+    // 判断是 Excel 还是 CSV
+    if (f.name.endsWith('.xlsx') || f.name.endsWith('.xls')) {
+      // Excel 模式
+      try {
+        const workbook = XLSX.read(data, {type: 'array'});
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        // 转换成二维数组 [[A1,B1..],[A2,B2..]]
+        rows = XLSX.utils.sheet_to_json(worksheet, {header: 1});
+      } catch (err) {
+        alert("Excel 解析失败，请检查文件是否加密");
+        document.querySelector('.btn').textContent = "导入失败";
+        return;
+      }
+    } else {
+      // CSV/Text 模式
+      const decoder = new TextDecoder("utf-8"); // 简单处理，假设 UTF-8
+      // 兼容之前的解码逻辑
+      let text = "";
+      const bytes = new Uint8Array(data);
+      if (bytes.length >= 2 && bytes[0]===0xFF && bytes[1]===0xFE) {
+        for (let i=2;i+1<bytes.length;i+=2) text += String.fromCharCode(bytes[i]|(bytes[i+1]<<8));
+      } else {
+        text = decoder.decode(bytes);
+      }
+      
+      // 转成二维数组
+      const lines = text.split(/\r?\n/).filter(l => l.trim() !== "");
+      // 自动判断分隔符
+      if(lines.length > 0) {
+          const l0 = lines[0];
+          const delim = l0.includes("\t") ? "\t" : (l0.includes(";") ? ";" : ",");
+          rows = lines.map(l => l.split(delim).map(s => s.trim()));
+      }
+    }
+
+    // 统一处理
+    allComps = processRows(rows);
     document.querySelector('.btn').textContent = "📂 " + f.name;
-    if(!allComps.length) { alert("无数据"); return; }
+    
+    if(!allComps.length) { 
+      alert("未识别到元件数据。请确保文件包含 Designator(Ref), Mid X, Mid Y 列"); 
+      return; 
+    }
+    
     setHighlight = makeViewer(allComps);
     renderList(allComps);
   };
+  
   reader.readAsArrayBuffer(f);
 });
 
 function renderList(comps){
   listContainer.innerHTML = "";
   if(!comps.length) { listContainer.innerHTML="<div style='padding:20px;text-align:center;color:#666'>无</div>"; return; }
-  // 限制渲染数量防止卡顿 (如果元件有几千个)
   const renderLimit = comps.length > 2000 ? 500 : comps.length;
-  
   for(let i=0; i<renderLimit; i++){
     const c = comps[i];
     const d = document.createElement("div"); d.className="comp-item"; d.id="item-"+c.ref;
-    const val = (c.value && c.value!=="-") ? c.value : c.comment;
-    d.innerHTML = `<span class="comp-ref">${c.ref}</span><span class="comp-desc">${val} ${c.footprint}</span>`;
+    // 列表显示：位号 + (Value优先 > Comment)
+    const val = (c.value && c.value.trim()!== "" && c.value!=="-") ? c.value : c.comment;
+    d.innerHTML = `<span class="comp-ref">${c.ref}</span><span class="comp-desc">${val||""} ${c.footprint||""}</span>`;
     d.onclick = () => { if(setHighlight) setHighlight(c.ref); };
     listContainer.appendChild(d);
   }
@@ -582,7 +496,11 @@ function renderList(comps){
 
 searchInput.addEventListener("input", e=>{
   const kw = e.target.value.trim().toUpperCase();
-  const f = allComps.filter(c=> c.ref.includes(kw) || (c.value && c.value.toUpperCase().includes(kw)));
+  const f = allComps.filter(c=> 
+    c.ref.includes(kw) || 
+    (c.value && c.value.toUpperCase().includes(kw)) ||
+    (c.comment && c.comment.toUpperCase().includes(kw))
+  );
   renderList(f);
 });
 
@@ -592,7 +510,6 @@ function updateInfo(c){
   let h = ""; rows.forEach(([k,v])=>h+=`<div class="info-row"><div class="info-label">${k}</div><div class="info-val">${v||'-'}</div></div>`);
   infoPanel.innerHTML = h;
 }
-
 </script>
 </body>
 </html>
