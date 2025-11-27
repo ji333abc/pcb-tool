@@ -6,36 +6,68 @@
 <title>PCB 焊接助手</title>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
 <style>
-  :root { --sidebar-bg:#2b2d30; --sidebar-text:#adb0b8; --accent:#4a88c7; --sel:#2675bf; --bg:#f0f2f5; --checked: #4caf50; }
+  :root { --sidebar-bg:#2b2d30; --panel-bg:#232528; --text-main:#adb0b8; --accent:#4a88c7; --sel:#2675bf; --bg:#f0f2f5; --checked: #4caf50; --border: #3e4145; }
   * { box-sizing:border-box; outline:none; -webkit-tap-highlight-color: transparent; }
   body { margin:0; font-family:-apple-system,sans-serif; height:100vh; display:flex; overflow:hidden; background:var(--bg); }
   
-  aside { width:320px; background:var(--sidebar-bg); color:var(--sidebar-text); display:flex; flex-direction:column; border-right:1px solid #1e1e1e; z-index:20; flex-shrink:0; }
+  /* === 滚动条样式 (黑色主题) === */
+  ::-webkit-scrollbar { width: 10px; height: 10px; background: #2b2d30; }
+  ::-webkit-scrollbar-thumb { background: #000; border-radius: 5px; border: 1px solid #333; }
+  ::-webkit-scrollbar-thumb:hover { background: #222; }
+  ::-webkit-scrollbar-corner { background: #2b2d30; }
+
+  /* === 左侧边栏容器 === */
+  aside { width:320px; background:var(--sidebar-bg); color:var(--text-main); display:flex; flex-direction:column; border-right:1px solid #1e1e1e; z-index:20; flex-shrink:0; transition: width 0.2s; }
+
+  /* === 面板通用样式 === */
+  .panel { display: flex; flex-direction: column; border-bottom: 1px solid var(--border); overflow: hidden; transition: all 0.2s; }
+  .panel-header { 
+    padding: 12px; background: #1e1f22; cursor: pointer; font-weight: bold; font-size: 13px; color: #eee; 
+    display: flex; justify-content: space-between; align-items: center; user-select: none;
+    border-left: 3px solid transparent;
+  }
+  .panel-header:hover { background: #333; }
+  .panel-header .icon { transition: transform 0.2s; font-size: 10px; color: #888; }
   
-  .header { padding:10px; background:#1e1f22; border-bottom:1px solid #3e4145; }
+  /* 折叠逻辑 */
+  .panel.collapsed .panel-header .icon { transform: rotate(-90deg); }
+  .panel.collapsed .panel-body { display: none !important; } 
+
+  /* === 1. 功能控制区 (优先显示，不压缩) === */
+  #panel-controls { flex: 0 0 auto; }
+  .ctrl-content { padding: 10px; }
+  
   .btn { display:block; background:var(--accent); color:#fff; text-align:center; padding:8px; border-radius:4px; font-size:14px; margin-bottom:8px; cursor:pointer; }
   .file-box { position:relative; overflow:hidden; }
   .file-box input { position:absolute; left:0; top:0; opacity:0; width:100%; height:100%; cursor:pointer; }
-  
-  input[type=text] { width:100%; padding:8px; background:#1e1f22; border:1px solid #555; color:#fff; border-radius:4px; margin-top:5px; font-size:16px; }
-  
+  input[type=text] { width:100%; padding:8px; background:#1e1f22; border:1px solid #555; color:#fff; border-radius:4px; margin-top:5px; font-size:14px; }
   .opt-group { display:flex; gap:15px; font-size:13px; color:#ddd; margin-bottom:6px; align-items:center; }
-  .opt-group label { display:flex; align-items:center; cursor:pointer; padding: 5px 0; }
-  .opt-group input { margin-right:4px; }
+  .opt-group label { display:flex; align-items:center; cursor:pointer; padding: 4px 0; }
   .divider { height:1px; background:#444; margin:8px 0; }
+
+  /* === 2. 列表区 (吃掉剩余空间，必须设置 min-height:0) === */
+  #panel-list { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+  #panel-list.collapsed { flex: 0 0 auto !important; } /* 折叠时释放空间 */
   
-  #list { flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; border-bottom: 1px solid #3e4145; }
-  .item { padding:12px 10px; border-bottom:1px solid #3e4145; cursor:pointer; display:flex; justify-content:space-between; align-items:center; }
+  /* 列表滚动容器 */
+  #list { flex: 1; overflow-y: auto; -webkit-overflow-scrolling:touch; height: 100%; background: #26282b; }
+  
+  .item { padding:10px 12px; border-bottom:1px solid #333; cursor:pointer; display:flex; justify-content:space-between; align-items:center; }
+  .item:hover { background: #2f3136; }
   .item.active { background:var(--sel); color:#fff; }
   .item.checked .ref { text-decoration: line-through; color: var(--checked); }
   .item b { display:block; font-size:15px; }
   .item span { font-size:12px; opacity:0.8; }
-  
-  #info-panel { height: 140px; background: #232528; padding: 10px; overflow-y: auto; font-size: 13px; color: #ddd; flex-shrink: 0; }
+
+  /* === 3. 详细信息区 (优先显示，不压缩) === */
+  #panel-info { flex: 0 0 auto; border-bottom: none; border-top: 1px solid var(--border); }
+  /* 固定高度，保证能显示大约 6-7 行信息，如果内容更多则内部滚动 */
+  #info-panel { height: 180px; background: var(--panel-bg); padding: 10px; overflow-y: auto; font-size: 13px; color: #ddd; }
   .info-row { display: flex; margin-bottom: 5px; border-bottom: 1px dashed #444; padding-bottom: 2px; }
   .info-label { width: 70px; color: #888; font-weight: bold; }
   .info-val { flex: 1; word-break: break-all; color: #fff; }
   
+  /* === 画布区域 === */
   main { flex:1; position:relative; background:radial-gradient(#ccc 1px, transparent 1px); background-size:20px 20px; overflow:hidden; touch-action:none; width: 100%; height: 100%; }
   canvas { display: block; width: 100%; height: 100%; position: absolute; top: 0; left: 0; }
   
@@ -48,33 +80,57 @@
     body { flex-direction: column-reverse; } 
     aside { width: 100%; height: 45%; }
     main { height: 55%; }
-    #info-panel { height: 100px; }
+    #info-panel { height: 140px; } /* 移动端稍微调小一点底部高度 */
   }
 </style>
 </head>
 <body>
 
 <aside>
-  <div class="header">
-    <div class="file-box">
-      <div class="btn">📂 导入 Excel / CSV</div>
-      <input type="file" id="file" accept=".csv,.txt,.xlsx,.xls">
+  <!-- 1. 功能控制区 (固定不缩放) -->
+  <div class="panel" id="panel-controls">
+    <div class="panel-header" onclick="togglePanel(this)">
+      🛠️ 设置与搜索 <span class="icon">▼</span>
     </div>
-    <div class="opt-group" style="font-weight:bold; color:#fff;">
-      <span>层级:</span>
-      <label><input type="radio" name="layer" value="T" checked> 顶层 (Top)</label>
-      <label><input type="radio" name="layer" value="B"> 底层 (Bot)</label>
+    <div class="panel-body ctrl-content">
+      <div class="file-box">
+        <div class="btn">📂 导入 Excel / CSV</div>
+        <input type="file" id="file" accept=".csv,.txt,.xlsx,.xls">
+      </div>
+      <div class="opt-group">
+        <span>层级:</span>
+        <label><input type="radio" name="layer" value="T" checked> Top</label>
+        <label><input type="radio" name="layer" value="B"> Bot</label>
+      </div>
+      <div class="divider"></div>
+      <div class="opt-group">
+        <span>显示:</span>
+        <label><input type="radio" name="mode" value="value" checked> 参数</label>
+        <label><input type="radio" name="mode" value="ref"> 位号</label>
+      </div>
+      <input type="text" id="search" placeholder="🔍 搜位号/Name...">
     </div>
-    <div class="divider"></div>
-    <div class="opt-group">
-      <span>显示:</span>
-      <label><input type="radio" name="mode" value="value" checked> 参数</label>
-      <label><input type="radio" name="mode" value="ref"> 位号</label>
-    </div>
-    <input type="text" id="search" placeholder="🔍 搜位号/Name...">
   </div>
-  <div id="list"><div style="padding:20px;text-align:center;opacity:0.5">请先导入文件</div></div>
-  <div id="info-panel"><div style="color:#666; text-align:center; margin-top:40px;">选中元件查看详情</div></div>
+
+  <!-- 2. 元件列表区 (自适应高度，出现滚动条) -->
+  <div class="panel" id="panel-list">
+    <div class="panel-header" onclick="togglePanel(this)">
+      📋 元件列表 <span class="icon">▼</span>
+    </div>
+    <div class="panel-body" style="flex:1; overflow:hidden; display:flex; flex-direction:column;">
+      <div id="list"><div style="padding:20px;text-align:center;opacity:0.5;font-size:12px">请先导入文件</div></div>
+    </div>
+  </div>
+
+  <!-- 3. 详细信息区 (固定不缩放，优先显示) -->
+  <div class="panel" id="panel-info">
+    <div class="panel-header" onclick="togglePanel(this)">
+      ℹ️ 详细信息 <span class="icon">▼</span>
+    </div>
+    <div class="panel-body">
+      <div id="info-panel"><div style="color:#666; text-align:center; margin-top:60px;">选中元件查看详情</div></div>
+    </div>
+  </div>
 </aside>
 
 <main>
@@ -84,6 +140,11 @@
 </main>
 
 <script>
+function togglePanel(header) {
+  const panel = header.parentElement;
+  panel.classList.toggle('collapsed');
+}
+
 const SHAPES = { CHIP:1, SOT:2, SOP:3, QFP:4, CIRCLE:6, DEFAULT:0 };
 const SMD_SIZES = { "01005": { w: 0.4, h: 0.2 }, "0201": { w: 0.6, h: 0.3 }, "0402": { w: 1.0, h: 0.5 }, "0603": { w: 1.6, h: 0.8 }, "0805": { w: 2.0, h: 1.25 }, "1206": { w: 3.2, h: 1.6 }, "1210": { w: 3.2, h: 2.5 }, "1812": { w: 4.5, h: 3.2 }, "2010": { w: 5.0, h: 2.5 }, "2512": { w: 6.35, h: 3.2 } };
 
@@ -125,7 +186,6 @@ function calculateBounds(fp, info) {
   return { w, h };
 }
 
-// 绘图函数 (保持你的完美版逻辑)
 function drawComponent(ctx, c, status) {
   const info = c.shapeInfo; const w = c.w, h = c.h;
   let color = "#666", fill = "#fff", padFill = "#ccc";
@@ -211,10 +271,7 @@ function makeViewer(allComps){
     
     filteredComps.forEach(c => {
       const isSel = (c.ref === sel), isHover = (c === hoveredComp);
-      // 【修复关键】：平板模式下，如果当前被选中(sel)存在，则以被选中元件为目标进行匹配
       const targetComp = isHover ? c : (sel ? filteredComps.find(x=>x.ref===sel) : null);
-      
-      // 匹配逻辑：非自身、非悬停、非选中，但参数一致
       const isMatch = targetComp && !isHover && !isSel && c.val && c.val!=="-" && c.val === targetComp.val && c.fp === targetComp.fp;
       
       ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(c.angle * Math.PI/180);
@@ -226,7 +283,6 @@ function makeViewer(allComps){
         let txt = c.ref; if(document.querySelector('input[name="mode"]:checked').value==="value") { const v = (c.val&&c.val!=="-")?c.val:c.name; if(v&&v!=="-") txt = v; }
         let fs = Math.max(12/t.k, 0.2); if(fs>2) fs=2;
         ctx.font = `bold ${fs}px Arial`; ctx.textAlign="center"; ctx.textBaseline="middle";
-        // 优先级：悬停 > 匹配 > 选中 > 已焊 > 普通
         ctx.fillStyle = isHover?"#d00":(isMatch?"#0056b3":(isSel?"#bf360c":(checkedSet.has(c.ref)?"#1b5e20":"#333")));
         ctx.fillText(txt, 0, 0); ctx.restore();
       }
@@ -251,82 +307,23 @@ function makeViewer(allComps){
     if(el) { document.querySelectorAll(".active").forEach(e=>e.classList.remove("active")); el.classList.add("active"); el.scrollIntoView({block:"nearest"}); const c = filteredComps.find(x => x.ref === ref); updateInfo(c); }
   }
 
-  function updateInfo(c) { document.getElementById("info-panel").innerHTML = c ? [["位号",c.ref],["值",c.val],["Name",c.name],["封装",c.fp],["坐标",`${c.x},${c.y}`]].map(([k,v])=>`<div class="info-row"><div class="info-label">${k}</div><div class="info-val">${v||'-'}</div></div>`).join("") : "<div style='color:#666;text-align:center;margin-top:40px;'>选中元件查看详情</div>"; }
+  function updateInfo(c) { document.getElementById("info-panel").innerHTML = c ? [["位号",c.ref],["值",c.val],["Name",c.name],["封装",c.fp],["坐标",`${c.x},${c.y}`]].map(([k,v])=>`<div class="info-row"><div class="info-label">${k}</div><div class="info-val">${v||'-'}</div></div>`).join("") : "<div style='color:#666;text-align:center;margin-top:60px;'>选中元件查看详情</div>"; }
 
-  // === 重新设计的事件系统 (完美解决幽灵点击) ===
   let drag = false, isTouch = false, lastX = 0, lastY = 0, lastDist = 0, lastTapTime = 0;
-
   const handleTap = (cx, cy, isDbl) => {
       const r = cvs.getBoundingClientRect();
       const curLayer = document.querySelector('input[name="layer"]:checked').value;
       let px = cx - r.left - t.x, py = cy - r.top - t.y; if(curLayer === 'B') px = -px;
       const wx = px/t.k, wy = py/-t.k;
       let hit = null; for(let i=filteredComps.length-1; i>=0; i--) { const c=filteredComps[i]; if(Math.abs(wx-c.x)<=c.w/2 && Math.abs(wy-c.y)<=c.h/2){ hit=c; break; } }
-      if(isDbl && hit) toggleCheck(hit.ref); 
-      else highlight(hit ? hit.ref : null);
+      if(isDbl && hit) toggleCheck(hit.ref); else highlight(hit ? hit.ref : null);
   };
-
-  // 触控
-  cvs.addEventListener('touchstart', e => {
-    e.preventDefault(); // 阻止产生后续的鼠标事件
-    isTouch = true;
-    if (e.touches.length === 1) { drag = true; lastX = e.touches[0].clientX; lastY = e.touches[0].clientY; } 
-    else if (e.touches.length === 2) { drag = false; const t1=e.touches[0], t2=e.touches[1]; lastDist=Math.hypot(t2.clientX-t1.clientX, t2.clientY-t1.clientY); }
-  }, {passive: false});
-
-  cvs.addEventListener('touchmove', e => {
-    e.preventDefault();
-    if (e.touches.length === 1 && drag) {
-      const cx = e.touches[0].clientX, cy = e.touches[0].clientY;
-      if(Math.hypot(cx-lastX, cy-lastY) > 2) { // 微动容差
-        t.x += cx - lastX; t.y += cy - lastY; lastX = cx; lastY = cy; draw();
-      }
-    } else if (e.touches.length === 2) {
-      const t1=e.touches[0], t2=e.touches[1]; const dist=Math.hypot(t2.clientX-t1.clientX, t2.clientY-t1.clientY);
-      if (lastDist > 0) {
-        const scale = dist / lastDist; const cx=(t1.clientX+t2.clientX)/2-cvs.getBoundingClientRect().left, cy=(t1.clientY+t2.clientY)/2-cvs.getBoundingClientRect().top;
-        t.x = cx - (cx - t.x) * scale; t.y = cy - (cy - t.y) * scale; t.k *= scale; draw();
-      }
-      lastDist = dist;
-    }
-  }, {passive: false});
-
-  cvs.addEventListener('touchend', e => {
-    e.preventDefault(); // 关键！阻止 click/mousedown 产生
-    drag = false;
-    if (e.changedTouches.length === 1) {
-        // 如果没发生明显移动，视为点击
-        const cx = e.changedTouches[0].clientX, cy = e.changedTouches[0].clientY;
-        const now = Date.now();
-        if(Math.hypot(cx-lastX, cy-lastY) < 5) { // 判定为 Tap
-            // 300ms 内算双击
-            if(now - lastTapTime < 300) { handleTap(cx, cy, true); lastTapTime = 0; }
-            else { handleTap(cx, cy, false); lastTapTime = now; }
-        }
-    }
-  });
-
-  // 鼠标 (仅当非触摸时触发)
+  cvs.addEventListener('touchstart', e => { e.preventDefault(); isTouch = true; if (e.touches.length === 1) { drag = true; lastX = e.touches[0].clientX; lastY = e.touches[0].clientY; } else if (e.touches.length === 2) { drag = false; const t1=e.touches[0], t2=e.touches[1]; lastDist=Math.hypot(t2.clientX-t1.clientX, t2.clientY-t1.clientY); } }, {passive: false});
+  cvs.addEventListener('touchmove', e => { e.preventDefault(); if (e.touches.length === 1 && drag) { const cx = e.touches[0].clientX, cy = e.touches[0].clientY; if(Math.hypot(cx-lastX, cy-lastY) > 2) { t.x += cx - lastX; t.y += cy - lastY; lastX = cx; lastY = cy; draw(); } } else if (e.touches.length === 2) { const t1=e.touches[0], t2=e.touches[1]; const dist=Math.hypot(t2.clientX-t1.clientX, t2.clientY-t1.clientY); if (lastDist > 0) { const scale = dist / lastDist; const cx=(t1.clientX+t2.clientX)/2-cvs.getBoundingClientRect().left, cy=(t1.clientY+t2.clientY)/2-cvs.getBoundingClientRect().top; t.x = cx - (cx - t.x) * scale; t.y = cy - (cy - t.y) * scale; t.k *= scale; draw(); } lastDist = dist; } }, {passive: false});
+  cvs.addEventListener('touchend', e => { e.preventDefault(); drag = false; if (e.changedTouches.length === 1) { const cx = e.changedTouches[0].clientX, cy = e.changedTouches[0].clientY; const now = Date.now(); if(Math.hypot(cx-lastX, cy-lastY) < 5) { if(now - lastTapTime < 300) { handleTap(cx, cy, true); lastTapTime = 0; } else { handleTap(cx, cy, false); lastTapTime = now; } } } });
   cvs.onmousedown = e => { if(isTouch)return; drag=true; lastX=e.clientX; lastY=e.clientY; };
-  window.onmousemove = e => { 
-    if(isTouch)return; 
-    if(e.buttons===1 && drag){ t.x+=e.clientX-lastX; t.y+=e.clientY-lastY; lastX=e.clientX; lastY=e.clientY; draw(); } 
-    else { // Hover (仅鼠标)
-      const r = cvs.getBoundingClientRect(); const curLayer = document.querySelector('input[name="layer"]:checked').value;
-      let px = e.clientX - r.left - t.x, py = e.clientY - r.top - t.y; if(curLayer === 'B') px = -px;
-      const wx = px/t.k, wy = py/-t.k;
-      let hit = null; for(let i=filteredComps.length-1; i>=0; i--) { const c=filteredComps[i]; if(Math.abs(wx-c.x)<=c.w/2 && Math.abs(wy-c.y)<=c.h/2){ hit=c; break; } }
-      if(hit !== hoveredComp) { hoveredComp = hit; draw(); }
-    }
-  };
-  window.onmouseup = e => { 
-    if(isTouch)return; drag=false; 
-    if(Math.hypot(e.clientX-lastX, e.clientY-lastY) < 5) {
-      // 简单的鼠标点击/双击区分
-      const cx=e.clientX, cy=e.clientY; const now=Date.now();
-      if(now - lastTapTime < 300) { handleTap(cx,cy,true); lastTapTime=0; } else { handleTap(cx,cy,false); lastTapTime=now; }
-    }
-  };
+  window.onmousemove = e => { if(isTouch)return; if(e.buttons===1 && drag){ t.x+=e.clientX-lastX; t.y+=e.clientY-lastY; lastX=e.clientX; lastY=e.clientY; draw(); } else { const r = cvs.getBoundingClientRect(); const curLayer = document.querySelector('input[name="layer"]:checked').value; let px = e.clientX - r.left - t.x, py = e.clientY - r.top - t.y; if(curLayer === 'B') px = -px; const wx = px/t.k, wy = py/-t.k; let hit = null; for(let i=filteredComps.length-1; i>=0; i--) { const c=filteredComps[i]; if(Math.abs(wx-c.x)<=c.w/2 && Math.abs(wy-c.y)<=c.h/2){ hit=c; break; } } if(hit !== hoveredComp) { hoveredComp = hit; draw(); } } };
+  window.onmouseup = e => { if(isTouch)return; drag=false; if(Math.hypot(e.clientX-lastX, e.clientY-lastY) < 5) { const cx=e.clientX, cy=e.clientY; const now=Date.now(); if(now - lastTapTime < 300) { handleTap(cx,cy,true); lastTapTime=0; } else { handleTap(cx,cy,false); lastTapTime=now; } } };
   cvs.onwheel = e => { e.preventDefault(); const r=cvs.getBoundingClientRect(); const d=e.deltaY>0?0.9:1.1; t.x = (e.clientX-r.left)-((e.clientX-r.left)-t.x)*d; t.y = (e.clientY-r.top)-((e.clientY-r.top)-t.y)*d; t.k*=d; draw(); };
 
   document.getElementById("reset").onclick = fit;
