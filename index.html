@@ -6,38 +6,46 @@
 <title>PCB 焊接助手</title>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
 <style>
-  :root { --sidebar-bg:#2b2d30; --sidebar-text:#adb0b8; --accent:#4a88c7; --sel:#2675bf; --bg:#f0f2f5; }
-  * { box-sizing:border-box; }
+  :root { --sidebar-bg:#2b2d30; --sidebar-text:#adb0b8; --accent:#4a88c7; --sel:#2675bf; --bg:#f0f2f5; --checked: #4caf50; }
+  * { box-sizing:border-box; outline:none; }
   body { margin:0; font-family:-apple-system,sans-serif; height:100vh; display:flex; overflow:hidden; background:var(--bg); }
   
   aside { width:320px; background:var(--sidebar-bg); color:var(--sidebar-text); display:flex; flex-direction:column; border-right:1px solid #1e1e1e; z-index:20; flex-shrink:0; }
   
   .header { padding:10px; background:#1e1f22; border-bottom:1px solid #3e4145; }
-  .btn { display:block; background:var(--accent); color:#fff; text-align:center; padding:8px; border-radius:4px; font-size:14px; margin-bottom:8px; cursor:pointer; }
+  .btn { display:block; background:var(--accent); color:#fff; text-align:center; padding:8px; border-radius:4px; font-size:14px; margin-bottom:8px; cursor:pointer; transition:0.2s; }
+  .btn:hover { background:#3b78b7; }
   .file-box { position:relative; overflow:hidden; }
   .file-box input { position:absolute; left:0; top:0; opacity:0; width:100%; height:100%; cursor:pointer; }
+  
   input[type=text] { width:100%; padding:8px; background:#1e1f22; border:1px solid #555; color:#fff; border-radius:4px; margin-top:5px;}
   
   .opt-group { display:flex; gap:15px; font-size:13px; color:#ddd; margin-bottom:6px; align-items:center; }
-  .opt-group label { display:flex; align-items:center; cursor:pointer; }
+  .opt-group label { display:flex; align-items:center; cursor:pointer; user-select:none; }
   .opt-group input { margin-right:4px; }
   .divider { height:1px; background:#444; margin:8px 0; }
-
+  
   #list { flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; border-bottom: 1px solid #3e4145; }
-  .item { padding:10px; border-bottom:1px solid #3e4145; cursor:pointer; }
+  .item { padding:10px; border-bottom:1px solid #3e4145; cursor:pointer; display:flex; justify-content:space-between; align-items:center; }
+  .item:hover { background:rgba(255,255,255,0.05); }
   .item.active { background:var(--sel); color:#fff; }
+  .item.checked .ref { text-decoration: line-through; color: var(--checked); }
   .item b { display:block; font-size:15px; }
   .item span { font-size:12px; opacity:0.8; }
-
+  
   #info-panel { height: 160px; background: #232528; padding: 10px; overflow-y: auto; font-size: 13px; color: #ddd; flex-shrink: 0; }
   .info-row { display: flex; margin-bottom: 5px; border-bottom: 1px dashed #444; padding-bottom: 2px; }
   .info-label { width: 70px; color: #888; font-weight: bold; }
   .info-val { flex: 1; word-break: break-all; color: #fff; }
-
+  
   main { flex:1; position:relative; background:radial-gradient(#ccc 1px, transparent 1px); background-size:20px 20px; overflow:hidden; touch-action:none; width: 100%; height: 100%; }
   canvas { display: block; width: 100%; height: 100%; position: absolute; top: 0; left: 0; }
-  #reset { position:absolute; top:10px; right:10px; background:#fff; border:1px solid #999; padding:5px 10px; border-radius:4px; cursor:pointer; z-index:5; }
   
+  #reset { position:absolute; top:10px; right:10px; background:#fff; border:1px solid #999; padding:5px 10px; border-radius:4px; cursor:pointer; z-index:5; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+  
+  .toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.7); color: #fff; padding: 8px 16px; border-radius: 20px; font-size: 14px; pointer-events: none; opacity: 0; transition: opacity 0.3s; z-index: 100; }
+  .toast.show { opacity: 1; }
+
   @media(max-width:768px){ body{flex-direction:column-reverse;} aside{width:100%;height:45%;} main{height:55%;} #info-panel { height: 120px; } }
 </style>
 </head>
@@ -61,60 +69,46 @@
       <label><input type="radio" name="mode" value="ref"> 位号</label>
     </div>
     <input type="text" id="search" placeholder="🔍 搜位号/Name...">
+    <div style="font-size:12px; color:#666; margin-top:4px; text-align:right;">💡 双击列表/元件标记完成</div>
   </div>
   <div id="list"><div style="padding:20px;text-align:center;opacity:0.5">请先导入文件</div></div>
   <div id="info-panel"><div style="color:#666; text-align:center; margin-top:40px;">选中元件查看详情</div></div>
 </aside>
 
 <main>
+  <div id="toast" class="toast"></div>
   <button id="reset">全屏适应</button>
   <canvas id="pcb"></canvas>
 </main>
 
 <script>
-// ========== 1. 参数提取与尺寸定义 ==========
+// ========== 1. 核心参数 ==========
 const SHAPES = { CHIP:1, SOT:2, SOP:3, QFP:4, CIRCLE:6, DEFAULT:0 };
-
-// 定义常见阻容感封装尺寸 (单位: mm)
-// 格式: { 长(W), 宽(H) } -> 注意：这里定义的是元件水平放置时的尺寸
 const SMD_SIZES = {
-  "01005": { w: 0.4, h: 0.2 },
-  "0201":  { w: 0.6, h: 0.3 },
-  "0402":  { w: 1.0, h: 0.5 },
-  "0603":  { w: 1.6, h: 0.8 },
-  "0805":  { w: 2.0, h: 1.25 },
-  "1206":  { w: 3.2, h: 1.6 },
-  "1210":  { w: 3.2, h: 2.5 },
-  "1812":  { w: 4.5, h: 3.2 },
-  "2010":  { w: 5.0, h: 2.5 },
-  "2512":  { w: 6.35, h: 3.2 }
+  "01005": { w: 0.4, h: 0.2 }, "0201": { w: 0.6, h: 0.3 }, "0402": { w: 1.0, h: 0.5 },
+  "0603": { w: 1.6, h: 0.8 }, "0805": { w: 2.0, h: 1.25 }, "1206": { w: 3.2, h: 1.6 },
+  "1210": { w: 3.2, h: 2.5 }, "1812": { w: 4.5, h: 3.2 }, "2010": { w: 5.0, h: 2.5 }, "2512": { w: 6.35, h: 3.2 }
 };
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1500);
+}
 
 function extractParams(fp) {
   const s = (fp || "").toUpperCase();
   const p = { L:null, W:null, P:null, LS:null, pins:null, sizeCode: null };
-  
-  // 1. 尝试提取 L, W, P (例如 L2.5-W1.2)
   const matchVal = key => { const m = s.match(new RegExp(`[-_\\s]${key}([\\d.]+)`)); return m ? parseFloat(m[1]) : null; };
   p.L = matchVal("L"); p.W = matchVal("W"); p.P = matchVal("P"); p.LS = matchVal("LS");
-
-  // 2. 尝试提取引脚数
   const sotMatch = s.match(/SOT[-_]?23[-_](\d+)/); 
   if (sotMatch) p.pins = parseInt(sotMatch[1]);
   else if (s.match(/(\d+)(?:-|_)?(?:PIN|P)(?=[-_]|$)/)) p.pins = parseInt(s.match(/(\d+)(?:-|_)?(?:PIN|P)(?=[-_]|$)/)[1]);
   else if (s.includes("SOT-23") || s.includes("SOT23")) p.pins = 3;
   else { const suffix = s.match(/(?:SOP|SOIC|TSSOP|QFN|QFP|DIP)[-_]?(\d+)/); if (suffix) p.pins = parseInt(suffix[1]); }
-
-  // 3. 【关键】尝试匹配标准尺寸代码 (0402, 1210 等)
-  // 遍历 SMD_SIZES 的 key，看字符串里是否包含
   for (let key in SMD_SIZES) {
-    // 匹配边界，防止 12060 这种被误判为 1206
-    // 逻辑：如果包含 key 且前后不是数字
     const reg = new RegExp(`(^|[^0-9])${key}([^0-9]|$)`);
-    if (reg.test(s) || s.includes("C"+key) || s.includes("R"+key) || s.includes("L"+key)) {
-      p.sizeCode = key;
-      break; 
-    }
+    if (reg.test(s) || s.includes("C"+key) || s.includes("R"+key) || s.includes("L"+key)) { p.sizeCode = key; break; }
   }
   return p;
 }
@@ -123,61 +117,54 @@ function analyzeFootprint(fp) {
   const s = (fp||"").toUpperCase();
   const p = extractParams(fp);
   let type = SHAPES.DEFAULT;
-
-  // 优先判断 CHIP 类型：如果有 sizeCode (如 1210) 或者名字像电阻电容
-  if(p.sizeCode || s.match(/^R\d+/) || s.match(/^C\d+/) || s.includes("RES") || s.includes("CAP") || s.includes("IND")) {
-    type = SHAPES.CHIP;
-  }
+  if(p.sizeCode || s.match(/^R\d+/) || s.match(/^C\d+/) || s.includes("RES") || s.includes("CAP") || s.includes("IND")) type = SHAPES.CHIP;
   else if(s.includes("SOT")) type = SHAPES.SOT;
   else if(s.includes("SOP")||s.includes("SOIC")) type = SHAPES.SOP;
   else if(s.includes("QFP")||s.includes("QFN")) type = SHAPES.QFP;
   else if(s.includes("RADIAL")||s.includes("CAN")||s.includes("ELECT")) type = SHAPES.CIRCLE;
-  
   return { type, ...p };
 }
 
 function calculateBounds(fp, info) {
   let w=2.0, h=1.0;
   const { L, W, LS, type, sizeCode } = info;
-
-  if(type === SHAPES.SOT) { 
-    w = L || 2.9; h = LS || ((W||1.3)+1.1); 
-  } 
-  else if(type === SHAPES.SOP) { 
-    w = L || ((info.pins||8)/2 * 1.27 + 1.0); h = LS || ((W||3.9)+2.0); 
-  } 
+  if(type === SHAPES.SOT) { w = L || 2.9; h = LS || ((W||1.3)+1.1); } 
+  else if(type === SHAPES.SOP) { w = L || ((info.pins||8)/2 * 1.27 + 1.0); h = LS || ((W||3.9)+2.0); } 
   else if(type === SHAPES.CHIP) { 
-    // 【关键】如果有识别到标准尺寸 (1210, 0603等)，直接查表
-    if (sizeCode && SMD_SIZES[sizeCode]) {
-      w = SMD_SIZES[sizeCode].w;
-      h = SMD_SIZES[sizeCode].h;
-    } else {
-      // 没识别到代码，尝试用 L/W，或者给默认值
-      if(L) w=L; 
-      if(W) h=W;
-    }
-  } 
-  else { 
-    if(L) w=L; if(W) h=W; 
-  }
-  
-  // 兜底：防止算出来尺寸为0
-  if(w < 0.2) w = 0.5;
-  if(h < 0.2) h = 0.5;
-
+    if (sizeCode && SMD_SIZES[sizeCode]) { w = SMD_SIZES[sizeCode].w; h = SMD_SIZES[sizeCode].h; } 
+    else { if(L) w=L; if(W) h=W; }
+  } else { if(L) w=L; if(W) h=W; }
+  if(w < 0.2) w = 0.5; if(h < 0.2) h = 0.5;
   return { w, h };
 }
-// ========== 2. 绘图引擎 ==========
-function drawComponent(ctx, c, isSel) {
+
+// ========== 2. 绘图引擎 (带颜色增强) ==========
+function drawComponent(ctx, c, status) {
+  // status: { isSel, isChecked, isHover, isMatch }
   const info = c.shapeInfo;
   const w = c.w, h = c.h;
-  const color = isSel ? "#d00" : "#666";
-  const fill = isSel ? "rgba(255,0,0,0.2)" : "#fff";
-  const padFill = isSel ? "rgba(255,0,0,0.6)" : "#ccc";
   
-  ctx.lineWidth = isSel ? 0.2 : 0.1;
+  // === 颜色逻辑 ===
+  // 默认: 灰色 / 填充白色
+  let color = "#666"; 
+  let fill = "#fff"; 
+  let padFill = "#ccc";
+
+  if (status.isChecked) { color = "#2e7d32"; fill = "#e8f5e9"; padFill = "#a5d6a7"; } // 绿 (已焊)
+  
+  // 匹配 (蓝色) 覆盖 已焊，方便查找
+  if (status.isMatch) { color = "#0056b3"; fill = "rgba(0,123,255,0.2)"; padFill = "rgba(0,123,255,0.5)"; }
+
+  // 选中 (黄色)
+  if (status.isSel) { color = "#fbc02d"; fill = "rgba(251, 192, 45, 0.3)"; padFill = "rgba(251, 192, 45, 0.6)"; }
+
+  // 悬停 (红色 - 最高优先级)
+  if (status.isHover) { color = "#d50000"; fill = "rgba(255,0,0,0.3)"; padFill = "rgba(255,0,0,0.7)"; }
+
+  ctx.lineWidth = (status.isSel || status.isHover) ? 0.2 : 0.1;
   ctx.strokeStyle = color; ctx.fillStyle = fill;
 
+  // --- 绘制形状 (复用之前的完美逻辑) ---
   if(info.type === SHAPES.SOT) {
     ctx.rotate(90 * Math.PI / 180); 
     const bodyH = info.W || (h * 0.55);
@@ -185,12 +172,10 @@ function drawComponent(ctx, c, isSel) {
     const P = info.P || 0.95;
     const padW = 0.5, padLen = (h - bodyH)/2;
     ctx.fillRect(-w/2, -bodyH/2, w, bodyH); ctx.strokeRect(-w/2, -bodyH/2, w, bodyH);
-    ctx.beginPath(); ctx.arc(-w/2+0.4, -bodyH/2+0.4, 0.15, 0, 2*Math.PI); ctx.fillStyle = isSel?"red":"#999"; ctx.fill();
+    ctx.beginPath(); ctx.arc(-w/2+0.4, -bodyH/2+0.4, 0.15, 0, 2*Math.PI); ctx.fillStyle = status.isHover?"red":"#999"; ctx.fill();
     ctx.fillStyle = padFill;
     if(pins === 3) {
-      ctx.fillRect(-P/2-padW/2, -bodyH/2, padW, -padLen); 
-      ctx.fillRect(P/2-padW/2, -bodyH/2, padW, -padLen); 
-      ctx.fillRect(-padW/2, bodyH/2, padW, padLen); 
+      ctx.fillRect(-P/2-padW/2, -bodyH/2, padW, -padLen); ctx.fillRect(P/2-padW/2, -bodyH/2, padW, -padLen); ctx.fillRect(-padW/2, bodyH/2, padW, padLen); 
     } else if(pins === 5) {
       ctx.fillRect(-P-padW/2, -bodyH/2, padW, -padLen); ctx.fillRect(-padW/2, -bodyH/2, padW, -padLen); ctx.fillRect(P-padW/2, -bodyH/2, padW, -padLen);
       ctx.fillRect(P-padW/2, bodyH/2, padW, padLen); ctx.fillRect(-P-padW/2, bodyH/2, padW, padLen);
@@ -198,17 +183,14 @@ function drawComponent(ctx, c, isSel) {
        for(let i of [-1, 0, 1]) { ctx.fillRect(i*P-padW/2, -bodyH/2, padW, -padLen); ctx.fillRect(i*P-padW/2, bodyH/2, padW, padLen); }
     } else {
       const side = Math.ceil(pins/2), startX = -((side-1)*P)/2;
-      for(let i=0; i<side; i++) { 
-        ctx.fillRect(startX+i*P-padW/2, -bodyH/2, padW, -padLen); 
-        if (i+side<pins) ctx.fillRect(startX+i*P-padW/2, bodyH/2, padW, padLen); 
-      }
+      for(let i=0; i<side; i++) { ctx.fillRect(startX+i*P-padW/2, -bodyH/2, padW, -padLen); if (i+side<pins) ctx.fillRect(startX+i*P-padW/2, bodyH/2, padW, padLen); }
     }
     ctx.rotate(-90 * Math.PI / 180);
   }
   else if(info.type === SHAPES.SOP) {
     const bodyH = info.W || (h * 0.6);
     ctx.fillRect(-w/2, -bodyH/2, w, bodyH); ctx.strokeRect(-w/2, -bodyH/2, w, bodyH);
-    ctx.beginPath(); ctx.arc(-w/2+w*0.1, -bodyH/2+bodyH*0.2, 0.2, 0, 2*Math.PI); ctx.fillStyle = isSel?"red":"#999"; ctx.fill();
+    ctx.beginPath(); ctx.arc(-w/2+w*0.1, -bodyH/2+bodyH*0.2, 0.2, 0, 2*Math.PI); ctx.fillStyle = status.isHover?"red":"#999"; ctx.fill();
     ctx.fillStyle = padFill;
     const sidePins = Math.floor((info.pins||8)/2), P = info.P || 1.27, startX = -((sidePins - 1) * P) / 2, padW = P*0.5, padLen = (h-bodyH)/2;
     for(let i=0; i<sidePins; i++) { const px = startX + i*P; ctx.fillRect(px-padW/2, -h/2, padW, padLen); ctx.fillRect(px-padW/2, bodyH/2, padW, padLen); }
@@ -219,11 +201,11 @@ function drawComponent(ctx, c, isSel) {
     ctx.fillStyle = fill; ctx.fillRect(-w/2+padW, -h/2, w-2*padW, h); ctx.strokeRect(-w/2, -h/2, w, h);
   }
   else if(info.type === SHAPES.CIRCLE) {
-    const r=Math.min(w,h)/2; ctx.beginPath(); ctx.arc(0,0,r,0,2*Math.PI); ctx.fill(); ctx.stroke(); ctx.fillStyle="#333"; ctx.fillRect(-r/2,-r,r,r/2);
+    const r=Math.min(w,h)/2; ctx.beginPath(); ctx.arc(0,0,r,0,2*Math.PI); ctx.fillStyle=fill; ctx.fill(); ctx.stroke(); ctx.fillStyle="#333"; ctx.fillRect(-r/2,-r,r,r/2);
   }
   else {
     ctx.fillRect(-w/2, -h/2, w, h); ctx.strokeRect(-w/2, -h/2, w, h);
-    ctx.beginPath(); ctx.arc(-w/2+w*0.15, -h/2+h*0.15, Math.min(w,h)*0.1, 0, 2*Math.PI); ctx.fillStyle = isSel?"red":"#ccc"; ctx.fill();
+    ctx.beginPath(); ctx.arc(-w/2+w*0.15, -h/2+h*0.15, Math.min(w,h)*0.1, 0, 2*Math.PI); ctx.fillStyle = status.isHover?"red":"#ccc"; ctx.fill();
   }
 }
 
@@ -231,39 +213,22 @@ function drawComponent(ctx, c, isSel) {
 function parseRows(rows) {
   if (!rows || rows.length < 2) return [];
   let hIdx = 0;
-  // 智能寻找表头 (包含 Designator 或 Ref)
   for(let i=0;i<Math.min(rows.length,5);i++){ const s=rows[i].join(" ").toLowerCase(); if(s.includes("designator")||s.includes("mid x")) { hIdx=i; break; } }
-  
   const h = rows[hIdx].map(x=>String(x).trim().toLowerCase());
   const find = ks => h.findIndex(c => ks.some(k => c.includes(k)));
-  
-  const iRef=find(["designator","ref"]);
-  const iX=find(["mid x","x(mm)"]);
-  const iY=find(["mid y","y(mm)"]);
-  const iRot=find(["rotation","angle"]);
-  const iLayer=find(["layer","层"]);
-  const iVal=find(["value","值"]);
-  const iFp=find(["footprint","封装"]);
-  // 【关键修改】不再找 comment/备注，而是找 name
-  const iName=find(["name", "comment", "备注", "device"]); 
-  
+  const iRef=find(["designator","ref"]); const iX=find(["mid x","x(mm)"]); const iY=find(["mid y","y(mm)"]);
+  const iRot=find(["rotation","angle"]); const iLayer=find(["layer","层"]); const iVal=find(["value","值"]);
+  const iFp=find(["footprint","封装"]); const iName=find(["name", "comment", "备注", "device"]);
   if(iRef<0 || iX<0 || iY<0) return [];
-  
   const num = v => parseFloat(String(v).replace(/mm/g,"")) || 0;
   const arr = [];
-  
   for(let i=hIdx+1; i<rows.length; i++){
     const r=rows[i]; if(!r || !r[iRef]) continue;
     const fp = iFp>=0 ? String(r[iFp]||"") : "";
     const layerRaw = iLayer>=0 ? String(r[iLayer]||"").toUpperCase() : "T";
-    const isBot = layerRaw.includes("B") || layerRaw.includes("BOTTOM");
-    const info = analyzeFootprint(fp);
-    const bounds = calculateBounds(fp, info);
-    
-    // 【关键修改】保存为 name 字段
+    const info = analyzeFootprint(fp); const bounds = calculateBounds(fp, info);
     const nameStr = iName>=0 ? String(r[iName]||"") : "";
-    
-    arr.push({ ref: r[iRef], x: num(r[iX]), y: num(r[iY]), angle: iRot>=0?num(r[iRot]):0, layer: isBot ? "B" : "T", w: bounds.w, h: bounds.h, val: iVal>=0?String(r[iVal]||""):"", name: nameStr, fp: fp, shapeInfo: info });
+    arr.push({ ref: r[iRef], x: num(r[iX]), y: num(r[iY]), angle: iRot>=0?num(r[iRot]):0, layer: layerRaw.includes("B")||layerRaw.includes("BOTTOM")?"B":"T", w: bounds.w, h: bounds.h, val: iVal>=0?String(r[iVal]||""):"", name: nameStr, fp: fp, shapeInfo: info, checked: false });
   }
   return arr;
 }
@@ -273,8 +238,12 @@ function makeViewer(allComps){
   const cvs = document.getElementById("pcb");
   const ctx = cvs.getContext("2d");
   const dpr = window.devicePixelRatio || 1;
-  let t = { k:15, x:0, y:0 }, sel = null, drag = false, last = {x:0,y:0}, lDist = 0;
+  let t = { k:15, x:0, y:0 }, sel = null, drag = false, last = {x:0,y:0};
   let filteredComps = [];
+  const checkedSet = new Set();
+  
+  // 悬停状态 (New)
+  let hoveredComp = null; 
 
   function updateFilter() {
     const curLayer = document.querySelector('input[name="layer"]:checked').value;
@@ -284,16 +253,26 @@ function makeViewer(allComps){
 
   function renderList() {
     const list = document.getElementById("list"); list.innerHTML = "";
-    const k = document.getElementById("search").value.toUpperCase();
-    const toShow = filteredComps.filter(c => c.ref.includes(k) || (c.val+c.name).toUpperCase().includes(k)).slice(0, 500);
-    if(!toShow.length) { list.innerHTML="<div style='padding:20px;text-align:center;color:#666'>当前层无数据</div>"; return;}
+    const rawInput = document.getElementById("search").value.toUpperCase().trim();
+    const keys = rawInput.split(/\s+/).filter(k => k);
+    const toShow = filteredComps.filter(c => {
+       if(!keys.length) return true;
+       const s = (c.ref + c.val + c.name).toUpperCase();
+       return keys.every(k => s.includes(k)); 
+    }).slice(0, 500);
+
+    if(!toShow.length) { list.innerHTML="<div style='padding:20px;text-align:center;color:#666'>无数据</div>"; return;}
+    const frag = document.createDocumentFragment();
     toShow.forEach(c => {
       const div = document.createElement("div"); div.className = "item"; div.id = "i-"+c.ref;
+      if(checkedSet.has(c.ref)) div.classList.add("checked");
       const v = (c.val && c.val!=="-") ? c.val : c.name;
-      div.innerHTML = `<b>${c.ref}</b><span>${v||""} ${c.fp}</span>`;
+      div.innerHTML = `<div style="flex:1"><b>${c.ref}</b><span>${v||""}</span></div> <span style="color:#666;font-size:10px">${c.fp}</span>`;
       div.onclick = () => highlight(c.ref);
-      list.appendChild(div);
+      div.ondblclick = () => toggleCheck(c.ref);
+      frag.appendChild(div);
     });
+    list.appendChild(frag);
   }
 
   function fit() {
@@ -301,34 +280,43 @@ function makeViewer(allComps){
     if(!filteredComps.length) { draw(); return; }
     let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;
     filteredComps.forEach(c=>{ x0=Math.min(x0,c.x-c.w/2); x1=Math.max(x1,c.x+c.w/2); y0=Math.min(y0,c.y-c.h/2); y1=Math.max(y1,c.y+c.h/2); });
-    const boardW = x1 - x0; const boardH = y1 - y0;
-    const screenW = cvs.width / dpr; const screenH = cvs.height / dpr;
-    const scale = Math.min(screenW / (boardW || 10), screenH / (boardH || 10)) * 0.9;
-    t.k = scale; t.x = screenW/2 - (x0 + x1)/2 * scale; t.y = screenH/2 + (y0 + y1)/2 * scale; 
+    const scale = Math.min((cvs.width/dpr)/(x1-x0||10), (cvs.height/dpr)/(y1-y0||10)) * 0.9;
+    t.k = scale; t.x = (cvs.width/dpr)/2 - (x0 + x1)/2 * scale; t.y = (cvs.height/dpr)/2 + (y0 + y1)/2 * scale; 
     draw();
   }
 
   function draw() {
     const W = cvs.width/dpr, H = cvs.height/dpr;
     ctx.clearRect(0,0,W,H);
-    if(!filteredComps.length && allComps.length > 0) {
-        ctx.save(); ctx.scale(1,1); ctx.font="20px Arial"; ctx.fillStyle="#999"; ctx.textAlign="center";
-        const curLayer = document.querySelector('input[name="layer"]:checked').value;
-        ctx.fillText(`当前层 (${curLayer === 'T' ? '顶层' : '底层'}) 无匹配元件`, W/2, H/2);
-        ctx.restore(); return;
-    }
     ctx.save();
     ctx.translate(t.x, t.y); ctx.scale(t.k, -t.k);
     const curLayer = document.querySelector('input[name="layer"]:checked').value;
     if(curLayer === 'B') ctx.scale(-1, 1);
     const mode = document.querySelector('input[name="mode"]:checked').value;
+
     filteredComps.forEach(c => {
+      // 状态计算
       const isSel = (c.ref === sel);
+      const isChecked = checkedSet.has(c.ref);
+      const isHover = (c === hoveredComp);
+      
+      // 匹配逻辑：不是当前悬停的，但是值和封装一样
+      // 注意：如果值是空或者是 "-"，则不视为匹配，防止所有空值元件变蓝
+      const isMatch = hoveredComp && !isHover 
+                      && c.val && c.val !== "-" 
+                      && c.val === hoveredComp.val 
+                      && c.fp === hoveredComp.fp;
+
+      const status = { isSel, isChecked, isHover, isMatch };
+
       ctx.save();
       ctx.translate(c.x, c.y);
       ctx.rotate(c.angle * Math.PI/180);
-      drawComponent(ctx, c, isSel);
+      
+      drawComponent(ctx, c, status);
       ctx.restore();
+
+      // 文字
       if(c.w * t.k > 15) {
         ctx.save(); ctx.translate(c.x, c.y); 
         if(curLayer === 'B') ctx.scale(-1, 1); ctx.scale(1, -1); 
@@ -336,7 +324,14 @@ function makeViewer(allComps){
         if(mode==="value") { const v = (c.val && c.val!=="-") ? c.val : c.name; if(v && v!=="-") txt = v; }
         let fs = 12/t.k; if(fs>2) fs=2; if(fs<0.2) fs=0.2;
         ctx.font = `bold ${fs}px Arial`; ctx.textAlign="center"; ctx.textBaseline="middle";
-        ctx.fillStyle = isSel ? "#d00" : "#333";
+        
+        // 字体颜色跟随状态，增加可读性
+        ctx.fillStyle = "#333";
+        if (isHover) ctx.fillStyle = "#d00";
+        else if (isMatch) ctx.fillStyle = "#0056b3";
+        else if (isSel) ctx.fillStyle = "#bf360c";
+        else if (isChecked) ctx.fillStyle = "#1b5e20";
+
         ctx.fillText(txt, 0, 0);
         ctx.restore();
       }
@@ -350,24 +345,43 @@ function makeViewer(allComps){
     if(cvs.width !== w || cvs.height !== h) { cvs.width = w; cvs.height = h; ctx.scale(dpr, dpr); }
     cvs.style.width = r.width + "px"; cvs.style.height = r.height + "px";
   }
+
+  function toggleCheck(ref) {
+    if(checkedSet.has(ref)) checkedSet.delete(ref); else checkedSet.add(ref);
+    const el = document.getElementById("i-"+ref); if(el) el.classList.toggle("checked");
+    draw(); showToast(ref + (checkedSet.has(ref) ? " 已完成" : " 撤销完成"));
+  }
+
   window.onresize = () => { resize(); draw(); };
   setTimeout(resize, 100);
-
   cvs.onwheel = e => { e.preventDefault(); const r=cvs.getBoundingClientRect(); zoom(e.clientX-r.left, e.clientY-r.top, e.deltaY>0?0.9:1.1); };
   function zoom(mx,my,d) { t.x = mx-(mx-t.x)*d; t.y = my-(my-t.y)*d; t.k*=d; draw(); }
   cvs.onmousedown = e => { drag=true; last={x:e.clientX,y:e.clientY}; };
-  window.onmousemove = e => { if(drag){ t.x+=e.clientX-last.x; t.y+=e.clientY-last.y; last={x:e.clientX,y:e.clientY}; draw(); } };
+  
+  // === 关键逻辑：分离拖拽与悬停 ===
+  window.onmousemove = e => { 
+    if(drag){ 
+      t.x+=e.clientX-last.x; t.y+=e.clientY-last.y; last={x:e.clientX,y:e.clientY}; draw(); 
+    } else {
+      // 悬停检测 (Hover Check)
+      checkHover(e.clientX, e.clientY);
+    }
+  };
   window.onmouseup = () => drag=false;
-  cvs.ontouchstart = e => { if(e.touches.length==1){drag=true;last={x:e.touches[0].clientX,y:e.touches[0].clientY}} else if(e.touches.length==2){drag=false;const t1=e.touches[0],t2=e.touches[1];lDist=Math.hypot(t2.clientX-t1.clientX,t2.clientY-t1.clientY)} };
-  cvs.ontouchmove = e => { e.preventDefault(); if(e.touches.length==1&&drag){t.x+=e.touches[0].clientX-last.x;t.y+=e.touches[0].clientY-last.y;last={x:e.touches[0].clientX,y:e.touches[0].clientY};draw();} else if(e.touches.length==2){const t1=e.touches[0],t2=e.touches[1],dist=Math.hypot(t2.clientX-t1.clientX,t2.clientY-t1.clientY),cx=(t1.clientX+t2.clientX)/2-cvs.getBoundingClientRect().left,cy=(t1.clientY+t2.clientY)/2-cvs.getBoundingClientRect().top;zoom(cx,cy,dist/lDist);lDist=dist;} };
 
-  let dX=0,dY=0;
-  const start=e=>{dX=e.clientX||e.touches[0].clientX;dY=e.clientY||e.touches[0].clientY};
-  const end=e=>{const cx=e.clientX||e.changedTouches[0].clientX,cy=e.clientY||e.changedTouches[0].clientY;if(Math.hypot(cx-dX,cy-dY)<10) hit(cx,cy)};
-  cvs.addEventListener("mousedown",start); cvs.addEventListener("mouseup",end);
-  cvs.addEventListener("touchstart",start); cvs.addEventListener("touchend",end);
+  let clickTimer = null;
+  const end = e => {
+     const cx=e.clientX||e.changedTouches[0].clientX, cy=e.clientY||e.changedTouches[0].clientY;
+     if(Math.hypot(cx-last.x, cy-last.y) < 5) {
+       if(clickTimer) { clearTimeout(clickTimer); clickTimer=null; performHit(cx,cy,true); }
+       else { clickTimer = setTimeout(()=>{ clickTimer=null; performHit(cx,cy,false); }, 250); }
+     }
+     drag=false;
+  };
+  cvs.onmouseup = end;
 
-  function hit(sx, sy) {
+  // 通用的坐标反算 (用于 Click 和 Hover)
+  function getCompByScreen(sx, sy) {
     const r = cvs.getBoundingClientRect();
     const curLayer = document.querySelector('input[name="layer"]:checked').value;
     let px = sx - r.left - t.x;
@@ -375,17 +389,33 @@ function makeViewer(allComps){
     if(curLayer === 'B') px = -px; 
     const wx = px / t.k;
     const wy = py / -t.k;
-    let h = null;
-    for(let c of filteredComps) { if(Math.abs(wx-c.x)<=c.w/2 && Math.abs(wy-c.y)<=c.h/2) { h=c; break; } }
-    highlight(h ? h.ref : null);
+    // 倒序查找
+    for(let i=filteredComps.length-1; i>=0; i--) {
+       const c = filteredComps[i];
+       if(Math.abs(wx-c.x)<=c.w/2 && Math.abs(wy-c.y)<=c.h/2) return c;
+    }
+    return null;
   }
 
-  // 【关键修改】显示 Name
+  function checkHover(sx, sy) {
+    const c = getCompByScreen(sx, sy);
+    // 只有当悬停对象改变时才重绘，提升性能
+    if (c !== hoveredComp) {
+      hoveredComp = c;
+      draw();
+    }
+  }
+
+  function performHit(sx, sy, isDbl) {
+    const c = getCompByScreen(sx, sy);
+    if(isDbl && c) toggleCheck(c.ref);
+    else highlight(c ? c.ref : null);
+  }
+
   function updateInfo(c) {
     const p = document.getElementById("info-panel");
     if(!c) { p.innerHTML = "<div style='color:#666;text-align:center;margin-top:40px;'>选中元件查看详情</div>"; return; }
-    // 这里的备注改成了 Name
-    const rows = [ ["位号",c.ref], ["值",c.val], ["Name",c.name], ["封装",c.fp], ["坐标",`${c.x}, ${c.y}`], ["角度",c.angle+"°"], ["层级",c.layer==='T'?"Top":"Bottom"] ];
+    const rows = [ ["位号",c.ref], ["值",c.val], ["Name",c.name], ["封装",c.fp], ["坐标",`${c.x}, ${c.y}`], ["角度",c.angle+"°"] ];
     let html = ""; rows.forEach(([k,v]) => { html += `<div class="info-row"><div class="info-label">${k}</div><div class="info-val">${v||'-'}</div></div>`; });
     p.innerHTML = html;
   }
@@ -401,43 +431,33 @@ function makeViewer(allComps){
       updateInfo(c);
     }
   }
-
   document.getElementById("reset").onclick = fit;
-  return { load: ()=>{ updateFilter(); fit(); }, update: updateFilter, highlight: highlight };
+  return { load: ()=>{ updateFilter(); fit(); }, update: updateFilter };
 }
 
 // ========== 5. Init ==========
 let comps = [];
 let viewer = null;
 const fileIn = document.getElementById("file");
-
+let searchTimer;
+document.getElementById("search").oninput = () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { if(viewer) viewer.update(); }, 300); };
 fileIn.onchange = e => {
   const f = e.target.files[0];
   if(!f) return;
   const r = new FileReader();
   r.onload = evt => {
-    let rows = [];
-    const d = evt.target.result;
+    let rows = []; const d = evt.target.result;
     if(f.name.match(/\.xls/)) {
-      try { const wb=XLSX.read(d,{type:'array'}); rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1}); } 
-      catch(e){alert("Excel读取失败");return;}
-    } else {
-      const txt = new TextDecoder().decode(new Uint8Array(d));
-      rows = txt.split(/\r?\n/).map(l=>l.split(/,|\t/));
-    }
+      try { const wb=XLSX.read(d,{type:'array'}); rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1}); } catch(e){alert("Excel读取失败");return;}
+    } else { const txt = new TextDecoder().decode(new Uint8Array(d)); rows = txt.split(/\r?\n/).map(l=>l.split(/,|\t/)); }
     comps = parseRows(rows);
-    if(!comps.length) return alert("未找到数据 (请检查Layer列)");
-    viewer = makeViewer(comps);
-    viewer.load();
+    if(!comps.length) return alert("未找到数据");
+    viewer = makeViewer(comps); viewer.load();
     document.querySelector('.btn').textContent = "📂 " + f.name;
   };
   r.readAsArrayBuffer(f);
 };
-
-document.querySelectorAll('input[type="radio"]').forEach(r => {
-  r.addEventListener('change', () => { if(viewer) viewer.update(); });
-});
-document.getElementById("search").oninput = () => { if(viewer) viewer.update(); };
+document.querySelectorAll('input[type="radio"]').forEach(r => { r.addEventListener('change', () => { if(viewer) viewer.update(); }); });
 </script>
 </body>
 </html>
