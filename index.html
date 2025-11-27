@@ -125,10 +125,9 @@ function calculateBounds(fp, info) {
   return { w, h };
 }
 
-// ========== 核心绘图 (完全还原版) ==========
+// 绘图函数 (保持你的完美版逻辑)
 function drawComponent(ctx, c, status) {
   const info = c.shapeInfo; const w = c.w, h = c.h;
-  
   let color = "#666", fill = "#fff", padFill = "#ccc";
   if (status.isChecked) { color = "#2e7d32"; fill = "#e8f5e9"; padFill = "#a5d6a7"; }
   if (status.isMatch) { color = "#0056b3"; fill = "rgba(0,123,255,0.2)"; padFill = "rgba(0,123,255,0.5)"; }
@@ -138,20 +137,15 @@ function drawComponent(ctx, c, status) {
   ctx.lineWidth = (status.isSel || status.isHover) ? 0.2 : 0.1;
   ctx.strokeStyle = color; ctx.fillStyle = fill;
 
-  // --- 完整还原的精细绘制逻辑 ---
   if(info.type === SHAPES.SOT) {
     ctx.rotate(90 * Math.PI / 180); 
-    const bodyH = info.W || (h * 0.55);
-    const pins = info.pins || 3;
-    const P = info.P || 0.95;
+    const bodyH = info.W || (h * 0.55); const pins = info.pins || 3; const P = info.P || 0.95;
     const padW = 0.5, padLen = (h - bodyH)/2;
     ctx.fillRect(-w/2, -bodyH/2, w, bodyH); ctx.strokeRect(-w/2, -bodyH/2, w, bodyH);
     ctx.beginPath(); ctx.arc(-w/2+0.4, -bodyH/2+0.4, 0.15, 0, 2*Math.PI); ctx.fillStyle = status.isHover?"red":"#999"; ctx.fill();
     ctx.fillStyle = padFill;
     if(pins === 3) {
-      ctx.fillRect(-P/2-padW/2, -bodyH/2, padW, -padLen); 
-      ctx.fillRect(P/2-padW/2, -bodyH/2, padW, -padLen); 
-      ctx.fillRect(-padW/2, bodyH/2, padW, padLen); 
+      ctx.fillRect(-P/2-padW/2, -bodyH/2, padW, -padLen); ctx.fillRect(P/2-padW/2, -bodyH/2, padW, -padLen); ctx.fillRect(-padW/2, bodyH/2, padW, padLen); 
     } else if(pins === 5) {
       ctx.fillRect(-P-padW/2, -bodyH/2, padW, -padLen); ctx.fillRect(-padW/2, -bodyH/2, padW, -padLen); ctx.fillRect(P-padW/2, -bodyH/2, padW, -padLen);
       ctx.fillRect(P-padW/2, bodyH/2, padW, padLen); ctx.fillRect(-P-padW/2, bodyH/2, padW, padLen);
@@ -159,33 +153,19 @@ function drawComponent(ctx, c, status) {
        for(let i of [-1, 0, 1]) { ctx.fillRect(i*P-padW/2, -bodyH/2, padW, -padLen); ctx.fillRect(i*P-padW/2, bodyH/2, padW, padLen); }
     } else {
       const side = Math.ceil(pins/2), startX = -((side-1)*P)/2;
-      for(let i=0; i<side; i++) { 
-        ctx.fillRect(startX+i*P-padW/2, -bodyH/2, padW, -padLen); 
-        if (i+side<pins) ctx.fillRect(startX+i*P-padW/2, bodyH/2, padW, padLen); 
-      }
+      for(let i=0; i<side; i++) { ctx.fillRect(startX+i*P-padW/2, -bodyH/2, padW, -padLen); if (i+side<pins) ctx.fillRect(startX+i*P-padW/2, bodyH/2, padW, padLen); }
     }
     ctx.rotate(-90 * Math.PI / 180);
   }
   else if(info.type === SHAPES.SOP) {
-    const bodyH = info.W || (h * 0.6);
-    ctx.fillRect(-w/2, -bodyH/2, w, bodyH); ctx.strokeRect(-w/2, -bodyH/2, w, bodyH);
+    const bodyH = info.W || (h * 0.6); ctx.fillRect(-w/2, -bodyH/2, w, bodyH); ctx.strokeRect(-w/2, -bodyH/2, w, bodyH);
     ctx.beginPath(); ctx.arc(-w/2+w*0.1, -bodyH/2+bodyH*0.2, 0.2, 0, 2*Math.PI); ctx.fillStyle = status.isHover?"red":"#999"; ctx.fill();
-    ctx.fillStyle = padFill;
-    const sidePins = Math.floor((info.pins||8)/2), P = info.P || 1.27, startX = -((sidePins - 1) * P) / 2, padW = P*0.5, padLen = (h-bodyH)/2;
+    ctx.fillStyle = padFill; const sidePins = Math.floor((info.pins||8)/2), P = info.P || 1.27, startX = -((sidePins - 1) * P) / 2, padW = P*0.5, padLen = (h-bodyH)/2;
     for(let i=0; i<sidePins; i++) { const px = startX + i*P; ctx.fillRect(px-padW/2, -h/2, padW, padLen); ctx.fillRect(px-padW/2, bodyH/2, padW, padLen); }
   }
-  else if(info.type === SHAPES.CHIP) {
-    const padW = w*0.25;
-    ctx.fillStyle = padFill; ctx.fillRect(-w/2, -h/2, padW, h); ctx.fillRect(w/2-padW, -h/2, padW, h);
-    ctx.fillStyle = fill; ctx.fillRect(-w/2+padW, -h/2, w-2*padW, h); ctx.strokeRect(-w/2, -h/2, w, h);
-  }
-  else if(info.type === SHAPES.CIRCLE) {
-    const r=Math.min(w,h)/2; ctx.beginPath(); ctx.arc(0,0,r,0,2*Math.PI); ctx.fillStyle=fill; ctx.fill(); ctx.stroke(); ctx.fillStyle="#333"; ctx.fillRect(-r/2,-r,r,r/2);
-  }
-  else {
-    ctx.fillRect(-w/2, -h/2, w, h); ctx.strokeRect(-w/2, -h/2, w, h);
-    ctx.beginPath(); ctx.arc(-w/2+w*0.15, -h/2+h*0.15, Math.min(w,h)*0.1, 0, 2*Math.PI); ctx.fillStyle = status.isHover?"red":"#ccc"; ctx.fill();
-  }
+  else if(info.type === SHAPES.CHIP) { const padW = w*0.25; ctx.fillStyle = padFill; ctx.fillRect(-w/2, -h/2, padW, h); ctx.fillRect(w/2-padW, -h/2, padW, h); ctx.fillStyle = fill; ctx.fillRect(-w/2+padW, -h/2, w-2*padW, h); ctx.strokeRect(-w/2, -h/2, w, h); }
+  else if(info.type === SHAPES.CIRCLE) { const r=Math.min(w,h)/2; ctx.beginPath(); ctx.arc(0,0,r,0,2*Math.PI); ctx.fillStyle=fill; ctx.fill(); ctx.stroke(); ctx.fillStyle="#333"; ctx.fillRect(-r/2,-r,r,r/2); }
+  else { ctx.fillRect(-w/2, -h/2, w, h); ctx.strokeRect(-w/2, -h/2, w, h); ctx.beginPath(); ctx.arc(-w/2+w*0.15, -h/2+h*0.15, Math.min(w,h)*0.1, 0, 2*Math.PI); ctx.fillStyle = status.isHover?"red":"#ccc"; ctx.fill(); }
 }
 
 function parseRows(rows) {
@@ -231,7 +211,10 @@ function makeViewer(allComps){
     
     filteredComps.forEach(c => {
       const isSel = (c.ref === sel), isHover = (c === hoveredComp);
+      // 【修复关键】：平板模式下，如果当前被选中(sel)存在，则以被选中元件为目标进行匹配
       const targetComp = isHover ? c : (sel ? filteredComps.find(x=>x.ref===sel) : null);
+      
+      // 匹配逻辑：非自身、非悬停、非选中，但参数一致
       const isMatch = targetComp && !isHover && !isSel && c.val && c.val!=="-" && c.val === targetComp.val && c.fp === targetComp.fp;
       
       ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(c.angle * Math.PI/180);
@@ -243,6 +226,7 @@ function makeViewer(allComps){
         let txt = c.ref; if(document.querySelector('input[name="mode"]:checked').value==="value") { const v = (c.val&&c.val!=="-")?c.val:c.name; if(v&&v!=="-") txt = v; }
         let fs = Math.max(12/t.k, 0.2); if(fs>2) fs=2;
         ctx.font = `bold ${fs}px Arial`; ctx.textAlign="center"; ctx.textBaseline="middle";
+        // 优先级：悬停 > 匹配 > 选中 > 已焊 > 普通
         ctx.fillStyle = isHover?"#d00":(isMatch?"#0056b3":(isSel?"#bf360c":(checkedSet.has(c.ref)?"#1b5e20":"#333")));
         ctx.fillText(txt, 0, 0); ctx.restore();
       }
@@ -269,76 +253,81 @@ function makeViewer(allComps){
 
   function updateInfo(c) { document.getElementById("info-panel").innerHTML = c ? [["位号",c.ref],["值",c.val],["Name",c.name],["封装",c.fp],["坐标",`${c.x},${c.y}`]].map(([k,v])=>`<div class="info-row"><div class="info-label">${k}</div><div class="info-val">${v||'-'}</div></div>`).join("") : "<div style='color:#666;text-align:center;margin-top:40px;'>选中元件查看详情</div>"; }
 
-  // === 触控事件 (Touch Support) ===
-  let drag = false, lastX = 0, lastY = 0, lastDist = 0;
-  
+  // === 重新设计的事件系统 (完美解决幽灵点击) ===
+  let drag = false, isTouch = false, lastX = 0, lastY = 0, lastDist = 0, lastTapTime = 0;
+
+  const handleTap = (cx, cy, isDbl) => {
+      const r = cvs.getBoundingClientRect();
+      const curLayer = document.querySelector('input[name="layer"]:checked').value;
+      let px = cx - r.left - t.x, py = cy - r.top - t.y; if(curLayer === 'B') px = -px;
+      const wx = px/t.k, wy = py/-t.k;
+      let hit = null; for(let i=filteredComps.length-1; i>=0; i--) { const c=filteredComps[i]; if(Math.abs(wx-c.x)<=c.w/2 && Math.abs(wy-c.y)<=c.h/2){ hit=c; break; } }
+      if(isDbl && hit) toggleCheck(hit.ref); 
+      else highlight(hit ? hit.ref : null);
+  };
+
+  // 触控
   cvs.addEventListener('touchstart', e => {
-    if (e.touches.length === 1) {
-      drag = true; lastX = e.touches[0].clientX; lastY = e.touches[0].clientY;
-    } else if (e.touches.length === 2) {
-      drag = false;
-      const t1 = e.touches[0], t2 = e.touches[1];
-      lastDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
-    }
+    e.preventDefault(); // 阻止产生后续的鼠标事件
+    isTouch = true;
+    if (e.touches.length === 1) { drag = true; lastX = e.touches[0].clientX; lastY = e.touches[0].clientY; } 
+    else if (e.touches.length === 2) { drag = false; const t1=e.touches[0], t2=e.touches[1]; lastDist=Math.hypot(t2.clientX-t1.clientX, t2.clientY-t1.clientY); }
   }, {passive: false});
 
   cvs.addEventListener('touchmove', e => {
     e.preventDefault();
     if (e.touches.length === 1 && drag) {
       const cx = e.touches[0].clientX, cy = e.touches[0].clientY;
-      t.x += cx - lastX; t.y += cy - lastY;
-      lastX = cx; lastY = cy;
-      draw();
+      if(Math.hypot(cx-lastX, cy-lastY) > 2) { // 微动容差
+        t.x += cx - lastX; t.y += cy - lastY; lastX = cx; lastY = cy; draw();
+      }
     } else if (e.touches.length === 2) {
-      const t1 = e.touches[0], t2 = e.touches[1];
-      const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+      const t1=e.touches[0], t2=e.touches[1]; const dist=Math.hypot(t2.clientX-t1.clientX, t2.clientY-t1.clientY);
       if (lastDist > 0) {
-        const scale = dist / lastDist;
-        const cx = (t1.clientX + t2.clientX) / 2 - cvs.getBoundingClientRect().left;
-        const cy = (t1.clientY + t2.clientY) / 2 - cvs.getBoundingClientRect().top;
-        t.x = cx - (cx - t.x) * scale; t.y = cy - (cy - t.y) * scale; t.k *= scale;
-        draw();
+        const scale = dist / lastDist; const cx=(t1.clientX+t2.clientX)/2-cvs.getBoundingClientRect().left, cy=(t1.clientY+t2.clientY)/2-cvs.getBoundingClientRect().top;
+        t.x = cx - (cx - t.x) * scale; t.y = cy - (cy - t.y) * scale; t.k *= scale; draw();
       }
       lastDist = dist;
     }
   }, {passive: false});
 
-  cvs.addEventListener('touchend', e => { drag = false; });
+  cvs.addEventListener('touchend', e => {
+    e.preventDefault(); // 关键！阻止 click/mousedown 产生
+    drag = false;
+    if (e.changedTouches.length === 1) {
+        // 如果没发生明显移动，视为点击
+        const cx = e.changedTouches[0].clientX, cy = e.changedTouches[0].clientY;
+        const now = Date.now();
+        if(Math.hypot(cx-lastX, cy-lastY) < 5) { // 判定为 Tap
+            // 300ms 内算双击
+            if(now - lastTapTime < 300) { handleTap(cx, cy, true); lastTapTime = 0; }
+            else { handleTap(cx, cy, false); lastTapTime = now; }
+        }
+    }
+  });
 
-  cvs.onmousedown = e => { drag=true; lastX=e.clientX; lastY=e.clientY; };
+  // 鼠标 (仅当非触摸时触发)
+  cvs.onmousedown = e => { if(isTouch)return; drag=true; lastX=e.clientX; lastY=e.clientY; };
   window.onmousemove = e => { 
+    if(isTouch)return; 
     if(e.buttons===1 && drag){ t.x+=e.clientX-lastX; t.y+=e.clientY-lastY; lastX=e.clientX; lastY=e.clientY; draw(); } 
-    else { // Hover
-      const r = cvs.getBoundingClientRect();
-      const curLayer = document.querySelector('input[name="layer"]:checked').value;
+    else { // Hover (仅鼠标)
+      const r = cvs.getBoundingClientRect(); const curLayer = document.querySelector('input[name="layer"]:checked').value;
       let px = e.clientX - r.left - t.x, py = e.clientY - r.top - t.y; if(curLayer === 'B') px = -px;
       const wx = px/t.k, wy = py/-t.k;
       let hit = null; for(let i=filteredComps.length-1; i>=0; i--) { const c=filteredComps[i]; if(Math.abs(wx-c.x)<=c.w/2 && Math.abs(wy-c.y)<=c.h/2){ hit=c; break; } }
       if(hit !== hoveredComp) { hoveredComp = hit; draw(); }
     }
   };
-  window.onmouseup = () => drag=false;
-  cvs.onwheel = e => { e.preventDefault(); const r=cvs.getBoundingClientRect(); const d=e.deltaY>0?0.9:1.1; t.x = (e.clientX-r.left)-((e.clientX-r.left)-t.x)*d; t.y = (e.clientY-r.top)-((e.clientY-r.top)-t.y)*d; t.k*=d; draw(); };
-
-  let clickT = null, startX=0, startY=0;
-  const start = e => { startX=e.clientX||e.touches[0].clientX; startY=e.clientY||e.touches[0].clientY; };
-  const end = e => {
-    const cx=e.clientX||e.changedTouches[0].clientX, cy=e.clientY||e.changedTouches[0].clientY;
-    const handleTap = (cx, cy, isDbl) => {
-        const r = cvs.getBoundingClientRect();
-        const curLayer = document.querySelector('input[name="layer"]:checked').value;
-        let px = cx - r.left - t.x, py = cy - r.top - t.y; if(curLayer === 'B') px = -px;
-        const wx = px/t.k, wy = py/-t.k;
-        let hit = null; for(let i=filteredComps.length-1; i>=0; i--) { const c=filteredComps[i]; if(Math.abs(wx-c.x)<=c.w/2 && Math.abs(wy-c.y)<=c.h/2){ hit=c; break; } }
-        if(isDbl && hit) toggleCheck(hit.ref); else highlight(hit ? hit.ref : null);
-    };
-    if(Math.hypot(cx-startX, cy-startY) < 10) {
-      if(clickT) { clearTimeout(clickT); clickT=null; handleTap(cx,cy,true); }
-      else { clickT = setTimeout(()=>{ clickT=null; handleTap(cx,cy,false); }, 250); }
+  window.onmouseup = e => { 
+    if(isTouch)return; drag=false; 
+    if(Math.hypot(e.clientX-lastX, e.clientY-lastY) < 5) {
+      // 简单的鼠标点击/双击区分
+      const cx=e.clientX, cy=e.clientY; const now=Date.now();
+      if(now - lastTapTime < 300) { handleTap(cx,cy,true); lastTapTime=0; } else { handleTap(cx,cy,false); lastTapTime=now; }
     }
   };
-  cvs.addEventListener('mousedown', start); cvs.addEventListener('mouseup', end);
-  cvs.addEventListener('touchstart', start); cvs.addEventListener('touchend', end);
+  cvs.onwheel = e => { e.preventDefault(); const r=cvs.getBoundingClientRect(); const d=e.deltaY>0?0.9:1.1; t.x = (e.clientX-r.left)-((e.clientX-r.left)-t.x)*d; t.y = (e.clientY-r.top)-((e.clientY-r.top)-t.y)*d; t.k*=d; draw(); };
 
   document.getElementById("reset").onclick = fit;
   return { load: ()=>{ updateFilter(); fit(); }, update: updateFilter };
