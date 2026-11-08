@@ -228,18 +228,85 @@ function drawComponent(ctx, c, status) {
   else { ctx.fillRect(-w/2, -h/2, w, h); ctx.strokeRect(-w/2, -h/2, w, h); ctx.beginPath(); ctx.arc(-w/2+w*0.15, -h/2+h*0.15, Math.min(w,h)*0.1, 0, 2*Math.PI); ctx.fillStyle = status.isHover?"red":"#ccc"; ctx.fill(); }
 }
 
+// CSV/TSV 字段可能包含分隔符、换行或双引号，不能直接按逗号切开。
+function parseDelimited(text) {
+  text = text.replace(/^\uFEFF/, '');
+  const sepLine = text.match(/^sep=([,;\t])\r?\n/i);
+  if (sepLine) text = text.slice(sepLine[0].length);
+  const counts = { ',': 0, '\t': 0, ';': 0 };
+  let quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === '"') {
+      if (quoted && text[i + 1] === '"') i++;
+      else quoted = !quoted;
+    } else if (!quoted) {
+      if ((ch === '\r' || ch === '\n') && Object.values(counts).some(n => n)) break;
+      if (ch in counts) counts[ch]++;
+    }
+  }
+  const delimiter = sepLine ? sepLine[1] : Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0];
+  const rows = []; let row = [], field = ''; quoted = false;
+  const endRow = () => {
+    row.push(field); field = '';
+    if (row.some(cell => cell.trim() !== '')) rows.push(row);
+    row = [];
+  };
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === '"') {
+      if (quoted && text[i + 1] === '"') { field += '"'; i++; }
+      else if (quoted || !field.trim()) quoted = !quoted;
+      else field += ch;
+    } else if (!quoted && ch === delimiter) { row.push(field); field = ''; }
+    else if (!quoted && (ch === '\r' || ch === '\n')) {
+      endRow(); if (ch === '\r' && text[i + 1] === '\n') i++;
+    } else field += ch;
+  }
+  if (quoted) throw new Error('CSV 存在未闭合的双引号，请检查导出文件。');
+  endRow(); return rows;
+}
+
+function decodeText(buffer) {
+  const bytes = new Uint8Array(buffer);
+  if (bytes[0] === 0xFF && bytes[1] === 0xFE) return new TextDecoder('utf-16le').decode(bytes);
+  if (bytes[0] === 0xFE && bytes[1] === 0xFF) return new TextDecoder('utf-16be').decode(bytes);
+  try { return new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
+  catch (_) { return new TextDecoder('gb18030').decode(bytes); }
+}
+
 function parseRows(rows) {
   if (!rows || rows.length < 2) return [];
-  let hIdx = 0; for(let i=0;i<Math.min(rows.length,5);i++){ const s=rows[i].join(" ").toLowerCase(); if(s.includes("designator")||s.includes("mid x")) { hIdx=i; break; } }
-  const h = rows[hIdx].map(x=>String(x).trim().toLowerCase());
-  const find = ks => h.findIndex(c => ks.some(k => c.includes(k)));
-  const iRef=find(["designator","ref"]), iX=find(["mid x","x(mm)"]), iY=find(["mid y","y(mm)"]), iLayer=find(["layer","层"]), iVal=find(["value","值"]), iFp=find(["footprint","封装"]), iName=find(["name", "comment", "备注", "device"]), iRot=find(["rotation","angle"]);
+  const normalize = v => String(v == null ? '' : v).replace(/^\uFEFF/, '').trim().toLowerCase().replace(/[\s_]+/g, '').replace(/（/g, '(').replace(/）/g, ')');
+  const aliases = {
+    ref: ['designator', 'ref', 'reference', 'refdes', '位号'],
+    x: ['mid x', 'mid x(mm)', 'center x', 'center x(mm)', 'x(mm)', 'x', '中心x'],
+    y: ['mid y', 'mid y(mm)', 'center y', 'center y(mm)', 'y(mm)', 'y', '中心y'],
+    layer: ['layer', 'side', '层', '层级'], value: ['value', '值', '参数'],
+    fp: ['footprint', 'package', '封装'], name: ['name', 'comment', '备注', 'device'],
+    rotation: ['rotation', 'angle', 'rot', '角度']
+  };
+  const find = (h, keys) => {
+    for (const key of keys) { const i = h.indexOf(normalize(key)); if (i >= 0) return i; }
+    return -1;
+  };
+  const hIdx = rows.findIndex(r => r && ['ref', 'x', 'y'].every(key => find(r.map(normalize), aliases[key]) >= 0));
+  if (hIdx < 0) return [];
+  const h = rows[hIdx].map(normalize), col = key => find(h, aliases[key]);
+  const iRef=col('ref'), iX=col('x'), iY=col('y'), iLayer=col('layer'), iVal=col('value'), iFp=col('fp'), iName=col('name'), iRot=col('rotation');
   if(iRef<0 || iX<0 || iY<0) return [];
-  const num = v => parseFloat(String(v).replace(/mm/g,"")) || 0;
+  const num = v => {
+    const s = String(v == null ? '' : v).trim();
+    if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?\s*(?:mm|°|deg)?$/i.test(s)) return NaN;
+    return parseFloat(s);
+  };
   return rows.slice(hIdx+1).filter(r=>r&&r[iRef]).map(r=>{
     const fp = iFp>=0 ? String(r[iFp]||"") : "", layerRaw = iLayer>=0 ? String(r[iLayer]||"").toUpperCase() : "T";
     const info = analyzeFootprint(fp), bounds = calculateBounds(fp, info);
-    return { ref: r[iRef], x: num(r[iX]), y: num(r[iY]), angle: iRot>=0?num(r[iRot]):0, layer: layerRaw.includes("B")||layerRaw.includes("BOTTOM")?"B":"T", w: bounds.w, h: bounds.h, val: iVal>=0?String(r[iVal]||""):"", name: iName>=0 ? String(r[iName]||"") : "", fp: fp, shapeInfo: info, checked: false };
+    const x = num(r[iX]), y = num(r[iY]);
+    const angle = iRot >= 0 && String(r[iRot] == null ? '' : r[iRot]).trim() ? num(r[iRot]) : 0;
+    if (![x, y, angle].every(Number.isFinite)) throw new Error('元件 ' + r[iRef] + ' 的坐标或旋转角度无效。');
+    return { ref: String(r[iRef]).trim(), x, y, angle, layer: /^(B|BOT|BOTTOM|BOTTOMLAYER|底层|底面)$/i.test(layerRaw.replace(/\s+/g,''))?"B":"T", w: bounds.w, h: bounds.h, val: iVal>=0?String(r[iVal] == null ? '' : r[iVal]):"", name: iName>=0 ? String(r[iName] == null ? '' : r[iName]) : "", fp: fp, shapeInfo: info, checked: false };
   });
 }
 
@@ -327,7 +394,9 @@ function makeViewer(allComps){
   cvs.onwheel = e => { e.preventDefault(); const r=cvs.getBoundingClientRect(); const d=e.deltaY>0?0.9:1.1; t.x = (e.clientX-r.left)-((e.clientX-r.left)-t.x)*d; t.y = (e.clientY-r.top)-((e.clientY-r.top)-t.y)*d; t.k*=d; draw(); };
 
   document.getElementById("reset").onclick = fit;
-  return { load: ()=>{ updateFilter(); fit(); }, update: updateFilter };
+  return { load: ()=>{ updateFilter(); fit(); }, update: updateFilter,
+    loadData: data => { allComps = data; sel = null; hoveredComp = null; checkedSet.clear(); updateInfo(null); updateFilter(); fit(); }
+  };
 }
 
 let comps = [], viewer = null; const fileIn = document.getElementById("file"); let sTimer;
@@ -335,12 +404,26 @@ document.getElementById("search").oninput = () => { clearTimeout(sTimer); sTimer
 fileIn.onchange = e => {
   const f = e.target.files[0]; if(!f) return; const r = new FileReader();
   r.onload = evt => {
-    let rows=[]; const d=evt.target.result;
-    if(f.name.match(/\.xls/)){ try{const wb=XLSX.read(d,{type:'array'});rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1});}catch(e){alert("Error");return;} }
-    else { rows = (new TextDecoder().decode(new Uint8Array(d))).split(/\r?\n/).map(l=>l.split(/,|\t/)); }
-    comps = parseRows(rows); if(!comps.length) return alert("No Data Found");
-    viewer = makeViewer(comps); viewer.load(); document.querySelector('.btn').textContent = "📂 "+f.name;
-  }; r.readAsArrayBuffer(f);
+    try {
+      let rows=[]; const d=evt.target.result;
+      if (/\.xlsx?$/i.test(f.name)) {
+        if (typeof XLSX === 'undefined') throw new Error('Excel 读取库未加载，请联网后刷新，或导出为 CSV 再导入。');
+        const wb=XLSX.read(d,{type:'array'}); rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,defval:''});
+      } else rows = parseDelimited(decodeText(d));
+      const imported = parseRows(rows);
+      if (!imported.length) throw new Error('未找到元件数据，请确认包含 Designator、Mid X 和 Mid Y 列。');
+      comps = imported;
+      const layerRadio = document.querySelector('input[name="layer"]:checked');
+      if (!comps.some(c => c.layer === layerRadio.value)) document.querySelector('input[name="layer"][value="'+comps[0].layer+'"]').checked = true;
+      document.getElementById('search').value = '';
+      if (viewer) viewer.loadData(comps); else { viewer = makeViewer(comps); viewer.load(); }
+      document.querySelector('.btn').textContent = '📂 '+f.name;
+      showToast('已导入 '+comps.length+' 个元件');
+    } catch (error) { alert('导入失败：'+error.message); }
+    finally { fileIn.value = ''; }
+  };
+  r.onerror = () => { alert('文件读取失败，请重新选择文件。'); fileIn.value = ''; };
+  r.readAsArrayBuffer(f);
 };
 document.querySelectorAll('input[type="radio"]').forEach(r => { r.addEventListener('change', () => { if(viewer) viewer.update(); }); });
 window.onresize = () => { if(viewer) viewer.load(); };
